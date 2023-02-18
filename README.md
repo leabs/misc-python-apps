@@ -8,12 +8,13 @@ To run the apps, you need to have python installed on your system. You can downl
 
 - Download, clone, or fork the repository.
 - Open the terminal and navigate to the directory where the repository is located.
-- Run the app using the command `python3 <app_name>.py`
+- Change directories into the chosen app.
+- Run the app using the command `python3 main.py`
 
 ## Apps
 
 - **Retirement Calculator** - Calculates how much you should have at your selected age of retirement with compounding interest. This also lets you calculate NYSLRS Tier 6 retirement benefits because that's what my wife has, lol.
-
+- **Password Generator** - Generates a random password with letters, numbers, symbols, and punctuation.
 
 ## Contributing
 
