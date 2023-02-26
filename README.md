@@ -17,6 +17,7 @@ To run the apps, you need to have python installed on your system. You can downl
 - **Retirement Calculator** - Calculates how much you should have at your selected age of retirement with compounding interest. This also lets you calculate NYSLRS Tier 6 retirement benefits because that's what my wife has, lol.
 - **Password Generator** - Generates a random password with letters, numbers, symbols, and punctuation.
 - **Scrape All Copy** - Scrapes all the text from a website and saves it to a text file. Has requirements.txt file for installing the required modules.
+- **CSV to JSON Converter** - Converts a CSV file to a JSON file. This uses a csv file called `data.csv` within the `csv-to-json` directory. Want to convert your own? Replace the `data.csv` file with your own and run the app with `python3 main.py` in the directory.
 
 ## Contributing
 
