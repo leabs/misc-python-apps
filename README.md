@@ -21,3 +21,16 @@ To run the apps, you need to have python installed on your system. You can downl
 ## Contributing
 
 I'm a python noob, so if I'm doing something wrong or if you see something that can be done differently, please let me know by opening an issue or submitting a pull request. I'm open to any suggestions!!
+
+## App ideas
+
+- [ ] A simple calculator
+- [ ] Text based adventure game
+- [ ] BTC to USD converter
+- [ ] Tic-tac-toe
+- [ ] Rock, paper, scissors
+- [ ] Hangman
+- [ ] Blackjack
+- [ ] Slots
+- [ ] Weather app
+- [ ] Snake game
