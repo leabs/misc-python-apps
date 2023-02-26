@@ -25,11 +25,19 @@ def main():
     # Open a text file
     with open("copy.txt", "w") as f:
         # Write the headings to the text file
+        f.write("Headings: " + "\n")
         for heading in headings:
-            f.write(heading.text.strip() + " ")
+            f.write(heading.text.strip() + "\n")
+
+        # Print a blank line
+        print()
+
         # Write the paragraphs to the text file
+        f.write("Paragraph Contents: " + "\n")
+        print()
         for paragraph in paragraphs:
-            f.write(paragraph.text.strip() + " ")
+            f.write(paragraph.text.strip() + "\n")
+
     # Print a blank line
     print()
     # Print a message
