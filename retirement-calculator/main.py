@@ -71,8 +71,9 @@ if pension == "y":
         # Ask user for years of service, and calculate pension (less than 20 years, 20 years, or greater than 20 years)
         yearsOfService = int(
             input("How many years of service will you have? "))
-        
+
         # Benefit Reduction if retire before 63
+        # TODO this should be a loop or function
         if retire < 63:
             if retire == 55:
                 benefitReduction = 0.52
@@ -96,13 +97,16 @@ if pension == "y":
         if yearsOfService < 20:
             pensionAmount = round(pensionYearlyAverage *
                                   0.0166 * yearsOfService)
+
+            # TODO this should be a loop or function
             print("You can withdrawl $" + str(pensionAmount) + " per year in pension, plus $" + str(round(midRoundTotal * 0.06)) +
                   " per year in retirement interest giving you a yearly total of $" + str(pensionAmount + round(midRoundTotal * 0.06)) + " if you start withdrawing at age 63.")
             if retire < 63:
                 print("You input a retirement age under 63, so your pension will be reduced by " + str(benefitReduction * 100) +
                       "%, giving you a yearly total of $" + str(round(pensionAmount * benefitReduction)) + " if you start withdrawing at age " + str(retire) + ".")
         elif yearsOfService == 20:
-            pensionAmount = round(pensionYearlyAverage * 0.0175 * yearsOfService)
+            pensionAmount = round(pensionYearlyAverage *
+                                  0.0175 * yearsOfService)
             print("You can withdrawl $" + str(pensionAmount) + " per year in pension, plus $" + str(round(midRoundTotal * 0.06)) +
                   " per year in retirement interest giving you a yearly total of $" + str(pensionAmount + round(midRoundTotal * 0.06)) + " if you start withdrawing at age 63.")
             if retire < 63:

@@ -17,10 +17,13 @@ Here are some random applications in Python that run in a terminal. These are ju
 
 ## Apps
 
+- **Current Temp**(\*) - Gets the current temperature for a given zip code. This uses BS4 to get the current temperature from [https://www.yahoo.com/news/weather](https://www.yahoo.com/news/weather).
 - **CSV to JSON Converter** - Converts a CSV file to a JSON file. This uses a csv file called `data.csv` within the `csv-to-json` directory. Want to convert your own? Replace the `data.csv` file with your own and run the app with `python3 main.py` in the directory. The output file will be called `data.json` and will be located within the `csv-to-json` directory.
 - **Password Generator** - Generates a random password with letters, numbers, symbols, and punctuation using user input for the password length. (Between 8 and 64 characters)
 - **Retirement Calculator** - Calculates how much you can withdraw on your retirement accounts using earn compounded interest. This also lets you calculate a yearly withdraw amount using a known pension. In addition, NYSLRS Tier 6 retirement benefits can be calculated using this app (because that's what my wife has, lol).
 - **Scrape All Copy**(\*) - Scrapes all the text from a website and saves it to a text file. Has requirements.txt file for installing the required modules.
+- **Scrape Table**(\*) - Scrapes table data (tr, td, etc) from a user specified website and saves it to a CSV file in the root of the directory. Has requirements.txt file for installing the required modules.
+- **Scrape Temperature**(\*) - Scrapes temp data from Yahoo Weather for a user specified zip code. Has requirements.txt file for installing the required modules.
 
 ## Contributing
 
@@ -28,7 +31,6 @@ I'm a Python noob, so if I'm doing something wrong or if you see something that 
 
 ## App ideas
 
-- [ ] A simple calculator
 - [ ] Text based adventure game
 - [ ] BTC to USD converter
 - [ ] Tic-tac-toe
@@ -36,5 +38,4 @@ I'm a Python noob, so if I'm doing something wrong or if you see something that 
 - [ ] Hangman
 - [ ] Blackjack
 - [ ] Slots
-- [ ] Weather app
 - [ ] Snake game
