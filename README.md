@@ -25,14 +25,14 @@ Here are some random applications in Python that run in a terminal and are [help
 - **Scrape Table**(\*) - Scrapes table data (tr, td, etc) from a user specified website and saves it to a CSV file in the root of the directory. Has requirements.txt file for installing the required modules.
 - **Scrape Temperature**(\*) - Gets the current temperature for a given zip code. This uses BS4 to get the current temperature from [https://www.yahoo.com/news/weather](https://www.yahoo.com/news/weather).
 
-## Contributing
-
-I'm a Python noob, so if I'm doing something wrong or if you see something that can be done differently, please let me know by opening an issue or submitting a pull request.
-
 ## How these apps are useful to me
 
-- **CSV to JSON** - I'm working on a static site that has individual pages for trees. Converting the data from a CSV file to JSON makes it easier to build the pages with [Jekyll pagemaster](https://github.com/mnyrop/pagemaster/#readme)
+- **CSV to JSON Converter** - I'm working on a static site that has individual pages for trees. Converting the data from a CSV file to JSON makes it easier to build the pages with [Jekyll pagemaster](https://github.com/mnyrop/pagemaster/#readme)
 - **Get Rain Estimate** - I'm using this along with the macOS app called Alfred to quickly look up if I can expect rain in the next coming days. This informs me if I need to water my vegetable garden during the growing season.
 - **Password Generator** - Sometimes you want to generate a password quickly and or want to know the password is truly random using python's random module.
 - **Retirement Calculator** - This is a tool that informs me of an estimate of how much I can withdraw from my retirement accounts each year. This is useful for estimating how much I can spend each year in retirement.
 - **Scrape Apps** - A way to both understand python / web scraping and to easily and quickly get data from sites for data hoarding or to use in other projects!
+
+## Contributing
+
+I'm a Python noob, so if I'm doing something wrong or if you see something that can be done differently, please let me know by opening an issue or submitting a pull request.
