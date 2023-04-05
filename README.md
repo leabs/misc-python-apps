@@ -18,6 +18,7 @@ Here are some random applications in Python that run in a terminal and are [help
 ## App Explanations
 
 - **CSV to JSON** - Converts a CSV file to a JSON file. This uses a csv file called `data.csv` within the `csv-to-json` directory. Want to convert your own? Replace the `data.csv` file with your own and run the app with `python3 main.py` in the directory. The output file will be called `data.json` and will be located within the `csv-to-json` directory.
+- **Generate README** - This is a simple README template generator that takes in the project name and outputs README sections with links to the sections in markdown.
 - **Get Rain Estimate** - Using the openweathermap API and a user specified zip code, this app will tell you if it's going to rain in the next 5 days. This does require an openweathermap API key which you can get [here](https://openweathermap.org/api).
 - **Password Generator** - Generates a random password with letters, numbers, symbols, and punctuation using user input for the password length. (Between 8 and 64 characters)
 - **Retirement Calculator** - Calculates how much you can withdraw on your retirement accounts using earn compounded interest. This also lets you calculate a yearly withdraw amount using a known pension. In addition, NYSLRS Tier 6 retirement benefits can be calculated using this app (because that's what my wife has, lol).
@@ -28,6 +29,7 @@ Here are some random applications in Python that run in a terminal and are [help
 ## How these apps are useful to me
 
 - **CSV to JSON Converter** - I'm working on a static site that has individual pages for trees. Converting the data from a CSV file to JSON makes it easier to build the pages with [Jekyll pagemaster](https://github.com/mnyrop/pagemaster/#readme)
+- **Generate README** - I'm using this to generate README markdown files for projects to make them have a consistent look and feel. It also builds out a table of contents with links, saving me the time of having to do that manually. This may evolve in the future, but for now it works and saves me time.
 - **Get Rain Estimate** - I'm using this along with the macOS app called Alfred to quickly look up if I can expect rain in the next coming days. This informs me if I need to water my vegetable garden during the growing season.
 - **Password Generator** - Sometimes you want to generate a password quickly and or want to know the password is truly random using python's random module.
 - **Retirement Calculator** - This is a tool that informs me of an estimate of how much I can withdraw from my retirement accounts each year. This is useful for estimating how much I can spend each year in retirement.
