@@ -1,20 +1,11 @@
-# This app generates a README.md template for projects for consistency in my code repos
-
-# Import modules
-import os
-import sys
 import datetime
 
 # Get the project name from the command line
 project_name = input("Enter the project name: ")
 
-# Get the current date
-project_created = datetime.datetime.now().strftime("%B %d, %Y")
-
 # Create Array of README.md sections
 readme_sections = [
     f"# {project_name}",
-    # Table of contents
     "## Table of Contents",
     "## Objective",
     "## How It Works",
@@ -32,7 +23,6 @@ for section in readme_sections[2:]:
     # Add the section title to the table of contents
     table_of_contents.append(
         f"- [{section_title}](#{section_title.lower().replace(' ', '-')})")
-
 
 # Create the README.md file showing the section[0] then the table of contents then the rest of the sections
 with open("README.md", "w") as readme:
