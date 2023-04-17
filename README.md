@@ -23,6 +23,7 @@ Here are some random applications in Python that run in a terminal and are [help
 - **Password Generator** - Generates a random password with letters, numbers, symbols, and punctuation using user input for the password length. (Between 8 and 64 characters)
 - **Retirement Calculator** - Calculates how much you can withdraw on your retirement accounts using earn compounded interest. This also lets you calculate a yearly withdraw amount using a known pension. In addition, NYSLRS Tier 6 retirement benefits can be calculated using this app (because that's what my wife has, lol).
 - **Scrape All Copy**(\*) - Scrapes all the text from a website and saves it to a text file. Has requirements.txt file for installing the required modules.
+- **Scrape Project Idea**(\*) - Scrapes https://rosettacode.org/wiki/Category:Programming_Tasks for project ideas. Has requirements.txt file for installing the required modules.
 - **Scrape Table**(\*) - Scrapes table data (tr, td, etc) from a user specified website and saves it to a CSV file in the root of the directory. Has requirements.txt file for installing the required modules.
 - **Scrape Temperature**(\*) - Gets the current temperature for a given zip code. This uses BS4 to get the current temperature from [https://www.yahoo.com/news/weather](https://www.yahoo.com/news/weather).
 
