@@ -1,7 +1,7 @@
 # This scrapes Table data from an HTML table and saves it to a CSV file
 import bs4 as bs
 import urllib.request
-import csv
+import csv # for writing to csv
 
 # Ask user what website the table is on
 website = input('What website do you want to scrape? ')
@@ -20,7 +20,6 @@ table_data = [[cell.text for cell in row.find_all(['td', 'th'])]
               for row in table.find_all('tr')]
 # Remove white space
 table_data = [[cell.strip() for cell in row] for row in table_data]
-
 
 # Write the table data to a CSV file
 with open('table.csv', 'w') as csv_file:
