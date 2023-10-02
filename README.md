@@ -27,6 +27,7 @@ Here are some random applications in Python that run in a terminal and are [help
 - **Scrape Project Idea**(\*) - Scrapes https://rosettacode.org/wiki/Category:Programming_Tasks for project ideas. Has requirements.txt file for installing the required modules.
 - **Scrape Table**(\*) - Scrapes table data (tr, td, etc) from a user specified website and saves it to a CSV file in the root of the directory. Has requirements.txt file for installing the required modules.
 - **Scrape Temperature**(\*) - Gets the current temperature for a given zip code. This uses BS4 to get the current temperature from [https://www.yahoo.com/news/weather](https://www.yahoo.com/news/weather).
+- **Youtube Views and Subs**(\*) - Gets the number of views and subscribers for a given youtube channel. 
 
 ## How these apps are useful to me
 
@@ -37,6 +38,7 @@ Here are some random applications in Python that run in a terminal and are [help
 - **Password Generator** - Sometimes you want to generate a password quickly and or want to know the password is truly random using python's random module.
 - **Retirement Calculator** - This is a tool that informs me of an estimate of how much I can withdraw from my retirement accounts each year. This is useful for estimating how much I can spend each year in retirement.
 - **Scrape Apps** - A way to both understand python / web scraping and to easily and quickly get data from sites for data hoarding or to use in other projects!
+- **Youtube Views and Subs** - I'm using this to get the number of views and subscribers for a given youtube channel. I'm using this to track my own channel's growth.
 
 ## Contributing
 
