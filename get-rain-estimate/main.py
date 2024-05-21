@@ -1,40 +1,45 @@
 import requests
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+from collections import defaultdict
 
-# Paste your API key here
-API_KEY = ""
+# Load the environment variables
+load_dotenv()
+
+# Get your API key from environment
+API_KEY = os.getenv("OPENWEATHER_API_KEY")
 CITY_NAME = 'Syracuse'
 STATE_CODE = 'NY'
 COUNTRY_CODE = 'US'
 LOCATION = f"{CITY_NAME},{STATE_CODE},{COUNTRY_CODE}"
 BASE_URL = f"http://api.openweathermap.org/data/2.5/forecast?q={LOCATION}&appid={API_KEY}&units=imperial"
 
+# Get the weather data
+response = requests.get(BASE_URL)
 
-def get_weather_data():
-    response = requests.get(BASE_URL)
-    return response.json()
+# Check response status
+if response.status_code != 200:
+    print(f"Error: {response.status_code} - {response.reason}")
+else:
+    weather_data = response.json()
 
+    # Print daily rain estimate
+    if 'list' in weather_data:
+        daily_rain_estimate = defaultdict(float)
+        
+        for item in weather_data['list']:
+            date = datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d')
+            rain_info = item.get('rain', {})
+            rain_mm = rain_info.get('3h', 0)  # Get the rain volume in the last 3 hours
+            rain_in = rain_mm * 0.0393701  # Convert mm to inches
+            daily_rain_estimate[date] += rain_in
+        
+        total_rain_estimate = 0
+        for date, rain in daily_rain_estimate.items():
+            print(f"Date: {date}, Rain: {rain:.2f} inches")
+            total_rain_estimate += rain
 
-def main():
-    weather_data = get_weather_data()
-    # Create array of days with rain in the forecast
-    days_with_rain = []
-    for forecast in weather_data['list']:
-        if forecast['weather'][0]['main'] == 'Rain':
-            # Get the date of the forecast
-            forecast_date = datetime.fromtimestamp(forecast['dt'])
-            # Get total rainfall estimate for the entire day
-            rain = forecast['rain']['3h']
-            # Check if the date is already in the array
-            if forecast_date.date() not in days_with_rain:
-                days_with_rain.append(forecast_date.date())
-
-    # Convert days_with_rain to day and date (ex. Tuesday the 4th)
-    days_with_rain = [day.strftime("%A %d") for day in days_with_rain]
-
-    # Print the days along with the {rain} inches of rain
-    print(f"Expect rain on: {days_with_rain}")
-
-
-if __name__ == "__main__":
-    main()
+        print(f"Total rain estimate for the next 5 days: {total_rain_estimate:.2f} inches")
+    else:
+        print("Error fetching the weather data. Please check your API key and location.")
