@@ -5,15 +5,42 @@ Here are some random applications in Python that run in a terminal and are [help
 ## Requirements
 
 - To run the apps, you'll need to have Python installed on your system. You can download it from [here](https://www.python.org/downloads/).
+- Since this is a terminal application, you'll need to be able to run Python scripts from the terminal. If you're on Windows, you may need to add Python to your PATH. You can do this by following the instructions [here](https://geek-university.com/python/add-python-to-the-windows-path/).
 - Some apps require additional packages (details below), so you may need to install those as well. Do so by installing [pip](https://pypi.org/project/pip/), a Python package manager.
 
 ## Running the apps
 
-- Download, clone, or fork this repository.
-- Open the terminal and navigate to the directory where the repository is located.
-- Change directories into your chosen app.
-- Run the app using the command `python3 main.py` inside the chosen app directory.
-- NOTE: Some apps _may_ require you to install additional Python packages. Use the requirements.txt file to install the packages by running `pip3 install -r requirements.txt` in the app directory. Apps with requirements.txt file are marked with an asterisk (\*) in the list below.
+- Clone this repository:
+
+```bash
+git clone https://github.com/leabs/misc-python-apps
+```
+
+- Open a terminal and change directories into the repository root.
+
+```bash
+cd misc-python-apps
+```
+
+- This project uses **prompt_toolkit** for the user interface. Install it by using the requirements.txt file by running:
+
+```bash
+pip3 install -r requirements.txt
+```
+
+- From there you can run to see a list of apps to choose from:
+
+```bash
+python main.py
+```
+
+_note_: some apps require additional packages. If you see a requirements.txt file in the app's directory, you'll need to install the packages by going into that directory and running:
+
+```bash
+pip3 install -r requirements.txt
+```
+
+in the app's directory. Also there might be a `.env` file that you'll need to copy the contents of the `example.env` file to like the `batch-ask-openai` app.
 
 ## App Explanations
 
@@ -25,10 +52,10 @@ Here are some random applications in Python that run in a terminal and are [help
 - **Password Generator** - Generates a random password with letters, numbers, symbols, and punctuation using user input for the password length. (Between 8 and 64 characters)
 - **Retirement Calculator** - Calculates how much you can withdraw on your retirement accounts using earn compounded interest. This also lets you calculate a yearly withdraw amount using a known pension. In addition, NYSLRS Tier 6 retirement benefits can be calculated using this app (because that's what my wife has, lol).
 - **Scrape All Copy**(\*) - Scrapes all the text from a website and saves it to a text file. Has requirements.txt file for installing the required modules.
-- **Scrape Project Idea**(\*) - Scrapes https://rosettacode.org/wiki/Category:Programming_Tasks for project ideas. Has requirements.txt file for installing the required modules.
+- **Scrape Project Idea**(\*) - Scrapes <https://rosettacode.org/wiki/Category:Programming_Tasks> for project ideas. Has requirements.txt file for installing the required modules.
 - **Scrape Table**(\*) - Scrapes table data (tr, td, etc) from a user specified website and saves it to a CSV file in the root of the directory. Has requirements.txt file for installing the required modules.
 - **Scrape Temperature**(\*) - Gets the current temperature for a given zip code. This uses BS4 to get the current temperature from [https://www.yahoo.com/news/weather](https://www.yahoo.com/news/weather).
-- **Youtube Views and Subs**(\*) - Gets the number of views and subscribers for a given youtube channel. 
+- **Youtube Views and Subs**(\*) - Gets the number of views and subscribers for a given youtube channel.
 
 ## How these apps are useful to me
 
