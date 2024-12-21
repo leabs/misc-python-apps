@@ -45,6 +45,7 @@ in the app's directory. Also there might be a `.env` file that you'll need to co
 ## App Explanations
 
 - **Batch Ask OpenAI** - Asks the Open AI API a list of questions (from within a .csv) and generates a markdown file for each questions. Make sure to set your `OPENAI_API_KEY` by copying the `example.env` file to `.env` and adding your key.
+- **BTC Power Law Investment**(\*) - This app calculates the power law of Bitcoin and adjusts the recommended investment amount based on the current power level. It takes into account today's Bitcoin price compares to its past trends by checking how 'high up' the current price is between its lowest and highest expected values when plotted on a special kind of graph that stretches time and price into logarithms.
 - **CSV to JSON** - Converts a CSV file to a JSON file. This uses a csv file called `data.csv` within the `csv-to-json` directory. Want to convert your own? Replace the `data.csv` file with your own and run the app with `python3 main.py` in the directory. The output file will be called `data.json` and will be located within the `csv-to-json` directory.
 - **Generate README** - This is a simple README template generator that takes in the project name and outputs README sections with links to the sections in markdown.
 - **Get Rain Estimate** - Using the openweathermap API and a user specified zip code, this app will tell you if it's going to rain in the next 5 days. This does require an openweathermap API key which you can get [here](https://openweathermap.org/api).
@@ -60,6 +61,7 @@ in the app's directory. Also there might be a `.env` file that you'll need to co
 ## How these apps are useful to me
 
 - **Batch Ask OpenAI** - This has the ability to generate markdown files for any number of topics which I can then host for free as a static site.
+- **BTC Power Law Investment** - This quickly suggests an investment amount based on the current power level of Bitcoin. This is useful for me to quickly see how much I should invest based on a strategy I'm following and takes the emotion out of investing. (Lower power levels suggest a higher investment amount, and higher power levels suggest a lower investment amount.)
 - **CSV to JSON Converter** - I'm working on a static site that has individual pages for trees. Converting the data from a CSV file to JSON makes it easier to build the pages with [Jekyll pagemaster](https://github.com/mnyrop/pagemaster/#readme). I have found that sometimes the formatting used by my client in csv doesn't always mesh well with pagemaster, but JSON does!
 - **Generate README** - I'm using this to generate README markdown files for projects to make them have a consistent look and feel. It also builds out a table of contents with links, saving me the time of having to do that manually. This may evolve in the future, but for now it works and saves me time.
 - **Get Rain Estimate** - I'm using this along with the macOS app called Alfred to quickly look up if I can expect rain in the next coming days. This informs me if I need to water my vegetable garden during the growing season.
