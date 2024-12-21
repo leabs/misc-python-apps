@@ -56,6 +56,7 @@ in the app's directory. Also there might be a `.env` file that you'll need to co
 - **Scrape Project Idea**(\*) - Scrapes <https://rosettacode.org/wiki/Category:Programming_Tasks> for project ideas. Has requirements.txt file for installing the required modules.
 - **Scrape Table**(\*) - Scrapes table data (tr, td, etc) from a user specified website and saves it to a CSV file in the root of the directory. Has requirements.txt file for installing the required modules.
 - **Scrape Temperature**(\*) - Gets the current temperature for a given zip code. This uses BS4 to get the current temperature from [https://www.yahoo.com/news/weather](https://www.yahoo.com/news/weather).
+- **Stock Comparison**(\*) - Compares common tech stocks and outputs a table of stock data including total return, annualized volatility, and projected 10-year trend to the user. This uses the yfinance package to get stock data.
 - **Youtube Views and Subs**(\*) - Gets the number of views and subscribers for a given youtube channel.
 
 ## How these apps are useful to me
@@ -69,6 +70,7 @@ in the app's directory. Also there might be a `.env` file that you'll need to co
 - **Password Generator** - Sometimes you want to generate a password quickly and or want to know the password is truly random using python's random module.
 - **Retirement Calculator** - This is a tool that informs me of an estimate of how much I can withdraw from my retirement accounts each year. This is useful for estimating how much I can spend each year in retirement.
 - **Scrape Apps** - A way to both understand python / web scraping and to easily and quickly get data from sites for data hoarding or to use in other projects!
+- **Stock Comparison** - I'm using this to compare the performance of tech stocks to see which ones are performing the best. This shows me the data I am looking for in a simple table format. I do not day trade, so I am looking at long term trends (10 years).
 - **Youtube Views and Subs** - I'm using this to get the number of views and subscribers for a given youtube channel. I'm using this to track my own channel's growth.
 
 ## Contributing
