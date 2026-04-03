@@ -2,6 +2,36 @@
 
 Here are some random applications in Python that run in a terminal and are [helpful for various reasons](#how-these-apps-are-useful-to-me). These are just for fun and to learn Python. These are in no way meant to be used for anything serious, and many have _zero error checking or validation_. Maybe that is something I can come back and add in the future.
 
+## Quick CMS Add
+
+`quick-cms-add` is a small macOS helper for adding spreadsheet files to Strapi's CMS interface faster. It reads rows from an `.xlsx` file and fills the Strapi Enums section in the browser for you, which saves me time by avoiding repetitive copy/paste and manual entry for each enum item.
+
+This is specifically for adding spreadsheet data into Strapi's CMS interface, not for general spreadsheet importing.
+
+### Install
+
+```bash
+cd quick-cms-add
+```
+
+This app is intentionally lightweight and currently has no extra package install step beyond having Python available on your Mac.
+
+### Basic usage
+
+1. Open the target Strapi item in `Brave Browser` or `Google Chrome`.
+2. Make sure the Enums section is visible and one blank enum entry is ready.
+3. Run the app:
+
+```bash
+python3 app.py
+```
+
+4. Choose the `.xlsx` spreadsheet file.
+5. Confirm the sheet and column mappings.
+6. Use `Check Strapi Page`, then `Start Import`.
+
+The importer maps spreadsheet columns into Strapi fields and clicks `Add an entry` between rows so you can quickly build out enum entries from a spreadsheet.
+
 ## Requirements
 
 - To run the apps, you'll need to have Python installed on your system. You can download it from [here](https://www.python.org/downloads/).
@@ -51,6 +81,7 @@ in the app's directory. Also there might be a `.env` file that you'll need to co
 - **Get Rain Estimate** - Using the openweathermap API and a user specified zip code, this app will tell you if it's going to rain in the next 5 days. This does require an openweathermap API key which you can get [here](https://openweathermap.org/api).
 - **Markdown to HTML**(\*) - Generates HTML from a markdown file (index.md) including HTML boilerplate elements.
 - **Password Generator** - Generates a random password with letters, numbers, symbols, and punctuation using user input for the password length. (Between 8 and 64 characters)
+- **Quick CMS Add** - Imports rows from an `.xlsx` spreadsheet into Strapi's CMS interface by filling the Enums section in the browser. This is specifically for spreadsheet-driven entry into Strapi enum/repeatable component fields.
 - **Retirement Calculator** - Calculates how much you can withdraw on your retirement accounts using earn compounded interest. This also lets you calculate a yearly withdraw amount using a known pension. In addition, NYSLRS Tier 6 retirement benefits can be calculated using this app (because that's what my wife has, lol).
 - **Scrape All Copy**(\*) - Scrapes all the text from a website and saves it to a text file. Has requirements.txt file for installing the required modules.
 - **Scrape Project Idea**(\*) - Scrapes <https://rosettacode.org/wiki/Category:Programming_Tasks> for project ideas. Has requirements.txt file for installing the required modules.
@@ -68,6 +99,7 @@ in the app's directory. Also there might be a `.env` file that you'll need to co
 - **Get Rain Estimate** - I'm using this along with the macOS app called Alfred to quickly look up if I can expect rain in the next coming days. This informs me if I need to water my vegetable garden during the growing season.
 - **Markdown to HTML** - A quick way to format markdown into HTML without needing to pass the markdown through a site generator.
 - **Password Generator** - Sometimes you want to generate a password quickly and or want to know the password is truly random using python's random module.
+- **Quick CMS Add** - This saves me time when I need to take spreadsheet files and add that data into Strapi's CMS interface. Instead of manually copying each row into the browser, I can map the spreadsheet once and let the app fill the enum entries for me.
 - **Retirement Calculator** - This is a tool that informs me of an estimate of how much I can withdraw from my retirement accounts each year. This is useful for estimating how much I can spend each year in retirement.
 - **Scrape Apps** - A way to both understand python / web scraping and to easily and quickly get data from sites for data hoarding or to use in other projects!
 - **Stock Comparison** - I'm using this to compare the performance of tech stocks to see which ones are performing the best. This shows me the data I am looking for in a simple table format. I do not day trade, so I am looking at long term trends (10 years).
