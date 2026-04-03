@@ -15,9 +15,9 @@ html_content = f"""
 <head>
     <title>Markdown to HTML</title>
 </head>
-<body>
-{html_content}
-</body>
+    <body>
+    {html_content}
+    </body>
 </html>
 """
 
