@@ -1,0 +1,19 @@
+[project]
+name = "dd-bulk-export"
+version = "0.1.0"
+description = "GUI exporter for NERIS data-dictionary terms and nested values."
+requires-python = ">=3.10"
+dependencies = [
+    "playwright==1.62.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==8.4.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: exercises the public NERIS website in a real browser",
+]
