@@ -74,8 +74,14 @@ def test_write_prepends_and_preserves_logical_fields(tmp_path: Path) -> None:
     original_row = _template_row()
     _write_template(template_path, [original_row])
     original_bytes = template_path.read_bytes()
+    expected_sha256 = read_template(template_path).sha256
 
-    summary = write_merged_csv(template_path, output_path, [_scraped_row()])
+    summary = write_merged_csv(
+        template_path,
+        output_path,
+        [_scraped_row()],
+        expected_template_sha256=expected_sha256,
+    )
 
     assert summary.scraped_rows == 1
     assert summary.template_rows == 1
@@ -148,6 +154,27 @@ def test_explicit_overwrite_replaces_only_output(tmp_path: Path) -> None:
 
     assert template_path.read_bytes() == template_bytes
     assert output_path.read_text(encoding="utf-8").startswith(CSV_COLUMNS[0])
+
+
+def test_writer_rejects_template_changed_since_preview(tmp_path: Path) -> None:
+    template_path = tmp_path / "template.csv"
+    output_path = tmp_path / "output.csv"
+    _write_template(template_path, [_template_row("Original")])
+    expected_sha256 = read_template(template_path).sha256
+    _write_template(template_path, [_template_row("Changed")])
+    output_path.write_bytes(b"keep existing output")
+
+    with pytest.raises(CsvTemplateError, match="changed since the preview"):
+        write_merged_csv(
+            template_path,
+            output_path,
+            [_scraped_row()],
+            overwrite=True,
+            expected_template_sha256=expected_sha256,
+        )
+
+    assert output_path.read_bytes() == b"keep existing output"
+    assert list(tmp_path.glob(f".{output_path.name}.*.tmp")) == []
 
 
 def test_template_header_order_is_strict(tmp_path: Path) -> None:

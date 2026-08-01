@@ -64,6 +64,26 @@ def test_missing_page_size_defaults_to_100() -> None:
     assert parse_qs(urlsplit(normalized).query)["pageSize"] == ["100"]
 
 
+def test_page_size_is_capped_to_the_neris_maximum() -> None:
+    normalized = normalize_start_url(
+        "https://neris.fsri.org/data-dictionary"
+        "?module=core-entity&page=9&pageSize=501"
+    )
+    query = parse_qs(urlsplit(normalized).query)
+    assert query["page"] == ["1"]
+    assert query["pageSize"] == ["500"]
+
+
+def test_empty_optional_filters_are_removed() -> None:
+    normalized = normalize_start_url(
+        "https://neris.fsri.org/data-dictionary"
+        "?module=core-entity&search=&expanded=&page=1&pageSize=5"
+    )
+    query = parse_qs(urlsplit(normalized).query, keep_blank_values=True)
+    assert "search" not in query
+    assert "expanded" not in query
+
+
 def test_multiword_module_badge_maps_without_naive_url_split() -> None:
     assert module_parts_from_badges(
         ["Incident Analysis-Battery Incident"],
@@ -138,6 +158,15 @@ class _FakeNextLink:
         return None
 
 
+class _MissingLocator:
+    @property
+    def first(self) -> "_MissingLocator":
+        return self
+
+    def count(self) -> int:
+        return 0
+
+
 class _FakePage:
     url = (
         "https://neris.fsri.org/data-dictionary"
@@ -156,12 +185,67 @@ def test_disabled_next_link_is_not_followed() -> None:
     assert NerisScraper()._next_page_url(page, "core-entity") is None  # type: ignore[arg-type]
 
 
+def test_missing_next_link_fails_closed() -> None:
+    page = _FakePage(_MissingLocator())  # type: ignore[arg-type]
+    with pytest.raises(ScrapeError, match="next-page control is missing"):
+        NerisScraper()._next_page_url(page, "core-entity")  # type: ignore[arg-type]
+
+
 def test_enabled_next_link_is_validated_and_followed() -> None:
     page = _FakePage(
         _FakeNextLink(
             disabled=False,
             href="?module=core-entity&page=2&pageSize=1",
         )
+    )
+    assert NerisScraper()._next_page_url(page, "core-entity") == (
+        "https://neris.fsri.org/data-dictionary"
+        "?module=core-entity&page=2&pageSize=1"
+    )
+
+
+@pytest.mark.parametrize(
+    ("href", "message"),
+    [
+        ("?module=core-entity&page=3&pageSize=1", "expected page 2"),
+        ("?module=core-entity&page=2&pageSize=5", "page size"),
+    ],
+)
+def test_next_link_must_advance_one_page_without_resizing(
+    href: str, message: str
+) -> None:
+    page = _FakePage(_FakeNextLink(disabled=False, href=href))
+    with pytest.raises(ScrapeError, match=message):
+        NerisScraper()._next_page_url(page, "core-entity")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "href",
+    [
+        "?module=core-entity&search=station&page=2&pageSize=1",
+        "?module=core-entity&page=2&pageSize=1",
+    ],
+)
+def test_next_link_must_preserve_search_filter(href: str) -> None:
+    page = _FakePage(_FakeNextLink(disabled=False, href=href))
+    page.url = (
+        "https://neris.fsri.org/data-dictionary"
+        "?module=core-entity&search=entity&page=1&pageSize=1"
+    )
+    with pytest.raises(ScrapeError, match="changed the active filters"):
+        NerisScraper()._next_page_url(page, "core-entity")  # type: ignore[arg-type]
+
+
+def test_next_link_may_drop_non_filtering_expanded_state() -> None:
+    page = _FakePage(
+        _FakeNextLink(
+            disabled=False,
+            href="?module=core-entity&page=2&pageSize=1",
+        )
+    )
+    page.url = (
+        "https://neris.fsri.org/data-dictionary"
+        "?module=core-entity&expanded=Entity-NERIS-ID&page=1&pageSize=1"
     )
     assert NerisScraper()._next_page_url(page, "core-entity") == (
         "https://neris.fsri.org/data-dictionary"
@@ -323,6 +407,13 @@ class _FullTerm(_ValueTerm):
         return super().locator(selector)
 
 
+class _TermWithoutDescription(_FullTerm):
+    def locator(self, selector: str):
+        if selector == ":scope > div.prose":
+            return _MissingLocator()
+        return super().locator(selector)
+
+
 class _TermPage:
     def __init__(self, term: _FullTerm) -> None:
         self.term = term
@@ -361,6 +452,28 @@ def test_nested_accordion_scrape_clicks_and_maps_every_value() -> None:
     assert rows[1].description == "Café"
 
 
+@pytest.mark.parametrize("missing_label", ["Description:", "Definition:"])
+def test_nested_value_requires_both_rendered_fields(missing_label: str) -> None:
+    item = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")
+    item.content.paragraphs = tuple(
+        paragraph
+        for paragraph in item.content.paragraphs
+        if paragraph.label != missing_label
+    )
+
+    with pytest.raises(ScrapeError, match="missing its rendered"):
+        NerisScraper()._scrape_values(  # type: ignore[arg-type]
+            _ValueTerm(item),
+            _Button("Values"),
+            parent_title="Parent",
+            parent_id="Parent",
+            module="core",
+            submodule="entity",
+            seen_value_ids=set(),
+            cancel_event=threading.Event(),
+        )
+
+
 def test_page_scrape_discovers_outer_values_and_orders_term_before_values() -> None:
     value = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")
     term = _FullTerm(value)
@@ -377,6 +490,18 @@ def test_page_scrape_discovers_outer_values_and_orders_term_before_values() -> N
     assert term.outer_button.click_count == 1
     assert [row.term_id for row in rows] == ["Parent", "Parent-ONE"]
     assert (term_count, value_count, accordion_count) == (1, 1, 1)
+
+
+def test_page_scrape_requires_rendered_term_description() -> None:
+    with pytest.raises(ScrapeError, match="missing its description field"):
+        NerisScraper()._scrape_page(  # type: ignore[arg-type]
+            _TermPage(_TermWithoutDescription()),
+            module_filter="core-entity",
+            seen_term_ids=set(),
+            seen_value_ids=set(),
+            progress=lambda _message: None,
+            cancel_event=threading.Event(),
+        )
 
 
 class _PlaywrightContext:
@@ -457,6 +582,26 @@ def test_scrape_loop_collects_two_pages(monkeypatch: pytest.MonkeyPatch) -> None
     assert result.pages_visited == 2
     assert result.term_count == 2
     assert [row.term_id for row in result.rows] == ["Term-1", "Term-2"]
+    assert browser.closed
+
+
+def test_scrape_loop_rejects_navigation_to_a_different_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scraper = NerisScraper()
+    browser = _install_loop_fakes(monkeypatch, scraper)
+    monkeypatch.setattr(
+        scraper,
+        "_navigate",
+        lambda page, url: setattr(page, "url", url.replace("page=1", "page=2")),
+    )
+
+    with pytest.raises(ScrapeError, match="changed the requested page URL"):
+        scraper.scrape(
+            "https://neris.fsri.org/data-dictionary"
+            "?module=core-entity&page=1&pageSize=1"
+        )
+
     assert browser.closed
 
 

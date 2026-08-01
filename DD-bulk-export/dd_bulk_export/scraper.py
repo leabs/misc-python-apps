@@ -30,6 +30,7 @@ except ImportError:  # pragma: no cover - exercised only before dependencies ins
 NERIS_HOST = "neris.fsri.org"
 NERIS_PATH = "/data-dictionary"
 DEFAULT_PAGE_SIZE = "100"
+MAX_PAGE_SIZE = 500
 TERM_SELECTOR = "li[id].pt-8"
 VALUE_ITEM_SELECTOR = (
     "div[data-orientation='vertical'][id]:has(> h3 > button[aria-expanded])"
@@ -117,9 +118,13 @@ def normalize_start_url(url: str) -> str:
         raise InvalidNerisUrl("pageSize must be a positive integer.") from exc
     if numeric_page_size < 1:
         raise InvalidNerisUrl("pageSize must be a positive integer.")
+    numeric_page_size = min(numeric_page_size, MAX_PAGE_SIZE)
 
     normalized_query = [
-        (key, value) for key, value in query if key not in {"page", "pageSize"}
+        (key, value)
+        for key, value in query
+        if key not in {"page", "pageSize"}
+        and not (key in {"search", "expanded"} and not value.strip())
     ]
     normalized_query.extend((("page", "1"), ("pageSize", str(numeric_page_size))))
     return urlunsplit(
@@ -132,12 +137,61 @@ def _module_filter(url: str) -> str:
     return module
 
 
-def _validate_page_url(url: str, expected_module: str) -> str:
-    """Validate a pagination target without resetting it to page one."""
+def _pagination_integer(
+    query: Sequence[tuple[str, str]], key: str, *, location: str
+) -> int:
+    values = [value.strip() for query_key, value in query if query_key == key]
+    if len(values) != 1:
+        raise ScrapeError(
+            f"NERIS {location} URL must contain exactly one {key} value."
+        )
+    try:
+        number = int(values[0])
+    except ValueError as exc:
+        raise ScrapeError(
+            f"NERIS {location} URL contains an invalid {key} value."
+        ) from exc
+    if number < 1:
+        raise ScrapeError(
+            f"NERIS {location} URL contains an invalid {key} value."
+        )
+    return number
+
+
+def _validate_page_url(
+    url: str, expected_module: str, *, current_url: str
+) -> str:
+    """Validate that a pagination target advances one page without resizing."""
 
     parts, query, module = _validated_parts(url)
     if module != expected_module:
         raise ScrapeError("NERIS pagination changed the selected module unexpectedly.")
+    _, current_query, current_module = _validated_parts(current_url)
+    if current_module != expected_module:
+        raise ScrapeError("NERIS changed the selected module while paginating.")
+
+    current_page = _pagination_integer(current_query, "page", location="current page")
+    next_page = _pagination_integer(query, "page", location="next page")
+    if next_page != current_page + 1:
+        raise ScrapeError(
+            "NERIS pagination did not advance sequentially: expected page "
+            f"{current_page + 1}, received page {next_page}."
+        )
+
+    current_page_size = _pagination_integer(
+        current_query, "pageSize", location="current page"
+    )
+    next_page_size = _pagination_integer(query, "pageSize", location="next page")
+    if next_page_size != current_page_size:
+        raise ScrapeError("NERIS pagination changed the page size unexpectedly.")
+
+    ignored_filter_keys = {"page", "pageSize", "expanded"}
+    current_filters = sorted(
+        pair for pair in current_query if pair[0] not in ignored_filter_keys
+    )
+    next_filters = sorted(pair for pair in query if pair[0] not in ignored_filter_keys)
+    if next_filters != current_filters:
+        raise ScrapeError("NERIS pagination changed the active filters unexpectedly.")
     return urlunsplit(
         ("https", NERIS_HOST, NERIS_PATH, urlencode(query), "")
     )
@@ -154,6 +208,21 @@ def _canonical_url(url: str) -> str:
             "",
         )
     )
+
+
+def _validate_loaded_page_url(
+    loaded_url: str, requested_url: str, expected_module: str
+) -> None:
+    """Fail if navigation landed on a different dictionary page or filter."""
+
+    _, _, module = _validated_parts(loaded_url)
+    if module != expected_module:
+        raise ScrapeError("NERIS changed the selected module during navigation.")
+    if _canonical_url(loaded_url) != _canonical_url(requested_url):
+        raise ScrapeError(
+            "NERIS navigation changed the requested page URL unexpectedly; "
+            "the scrape stopped to prevent missing rows."
+        )
 
 
 def module_parts_from_badges(
@@ -296,6 +365,11 @@ class NerisScraper:
                     page_number = len(visited_pages)
                     report(f"Opening page {page_number}: {current_url}")
                     self._navigate(page, current_url)
+                    _validate_loaded_page_url(
+                        page.url,
+                        current_url,
+                        module_filter,
+                    )
 
                     page_rows, page_terms, page_values, page_accordions = (
                         self._scrape_page(
@@ -406,11 +480,11 @@ class NerisScraper:
             seen_term_ids.add(term_id)
 
             description_locator = term.locator(":scope > div.prose").first
-            description = (
-                _clean_text(description_locator.inner_text())
-                if description_locator.count()
-                else ""
-            )
+            if not description_locator.count():
+                raise ScrapeError(
+                    f"Rendered term '{term_id}' is missing its description field."
+                )
+            description = _clean_text(description_locator.inner_text())
             badges = self._module_badges(term)
             module, submodule = module_parts_from_badges(badges, module_filter)
             page_rows.append(
@@ -515,13 +589,22 @@ class NerisScraper:
                 ) from exc
 
             fields = self._value_fields(content)
+            missing_fields = [
+                name for name in ("description", "definition") if name not in fields
+            ]
+            if missing_fields:
+                rendered = " and ".join(missing_fields)
+                raise ScrapeError(
+                    f"Nested value '{value_id}' is missing its rendered "
+                    f"{rendered} field(s)."
+                )
             rows.append(
                 build_value_row(
                     parent_title=parent_title,
                     parent_id=parent_id,
                     label=label,
-                    description=fields.get("description", ""),
-                    definition=fields.get("definition", ""),
+                    description=fields["description"],
+                    definition=fields["definition"],
                     value_id=value_id,
                     module=module,
                     submodule=submodule,
@@ -552,13 +635,20 @@ class NerisScraper:
     def _next_page_url(self, page: Page, module_filter: str) -> str | None:
         next_link = page.locator("a[aria-label='Go to next page']").first
         if not next_link.count():
-            return None
+            raise ScrapeError(
+                "NERIS next-page control is missing; the rendered page markup "
+                "may have changed."
+            )
         if (next_link.get_attribute("aria-disabled") or "").casefold() == "true":
             return None
         href = next_link.get_attribute("href")
         if not href:
             raise ScrapeError("Enabled NERIS next-page control has no destination.")
-        return _validate_page_url(urljoin(page.url, href), module_filter)
+        return _validate_page_url(
+            urljoin(page.url, href),
+            module_filter,
+            current_url=page.url,
+        )
 
     @staticmethod
     def _raise_if_cancelled(cancel_event: threading.Event) -> None:

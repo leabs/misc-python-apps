@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import queue
+import shutil
 import threading
 from pathlib import Path
 
@@ -204,8 +205,23 @@ def test_fresh_output_save_calls_writer_and_updates_status(
     calls: list[tuple[object, ...]] = []
     monkeypatch.setattr(gui_module, "validate_output_path", lambda *_args, **_kwargs: output)
 
-    def fake_write(template_arg, output_arg, rows_arg, *, overwrite):
-        calls.append((template_arg, output_arg, tuple(rows_arg), overwrite))
+    def fake_write(
+        template_arg,
+        output_arg,
+        rows_arg,
+        *,
+        overwrite,
+        expected_template_sha256,
+    ):
+        calls.append(
+            (
+                template_arg,
+                output_arg,
+                tuple(rows_arg),
+                overwrite,
+                expected_template_sha256,
+            )
+        )
         return WriteSummary(output, scraped_rows=1, template_rows=76)
 
     monkeypatch.setattr(gui_module, "write_merged_csv", fake_write)
@@ -213,9 +229,60 @@ def test_fresh_output_save_calls_writer_and_updates_status(
 
     app._save()
 
-    assert calls == [(str(template), output, result.rows, False)]
+    assert calls == [(str(template), output, result.rows, False, "digest")]
     assert app.status_var.get() == "Saved 77 rows."
     assert "76 existing rows" in logs[-1]
+
+
+def test_template_change_during_overwrite_confirmation_blocks_save(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app_directory = Path(__file__).resolve().parents[1]
+    template = tmp_path / "template.csv"
+    output = tmp_path / "existing.csv"
+    shutil.copyfile(app_directory / "dd-test-template.csv", template)
+    output.write_bytes(b"keep existing output")
+    original_template = template.read_bytes()
+    result = _result()
+    signature = (
+        result.source_url,
+        str(template.resolve()).casefold(),
+        _file_signature(template),
+    )
+    app = _bare_app()
+    app._result = result
+    app._result_signature = signature
+    app._current_signature = lambda: signature  # type: ignore[method-assign]
+    app.template_var = _Var(str(template))
+    app.output_var = _Var(str(output))
+    app.root = object()  # type: ignore[assignment]
+    app.status_var = _Var("Ready to save.")
+    logs: list[str] = []
+    errors: list[str] = []
+    app._append_log = logs.append  # type: ignore[method-assign]
+
+    def mutate_template_and_confirm(*_args, **_kwargs) -> bool:
+        changed = original_template.replace(
+            b"Entity - NERIS ID", b"Entity - Changed ID", 1
+        )
+        template.write_bytes(changed)
+        return True
+
+    monkeypatch.setattr(gui_module.messagebox, "askyesno", mutate_template_and_confirm)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda _title, message, **_kwargs: errors.append(str(message)),
+    )
+
+    app._save()
+
+    assert template.read_bytes() != original_template
+    assert output.read_bytes() == b"keep existing output"
+    assert app.status_var.get() == "Ready to save."
+    assert errors and "changed since the preview" in errors[-1]
+    assert logs and "changed since the preview" in logs[-1]
+    assert list(tmp_path.glob(f".{output.name}.*.tmp")) == []
 
 
 def test_start_scrape_wires_validated_inputs_to_worker(
@@ -237,7 +304,7 @@ def test_start_scrape_wires_validated_inputs_to_worker(
     monkeypatch.setattr(
         gui_module,
         "read_template",
-        lambda _path: TemplateCsv(template_path.resolve(), tuple()),
+        lambda _path: TemplateCsv(template_path.resolve(), tuple(), "digest"),
     )
     monkeypatch.setattr(gui_module, "validate_output_path", lambda *_args, **_kwargs: output_path)
 

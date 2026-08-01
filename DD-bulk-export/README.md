@@ -12,7 +12,8 @@ their Description/Definition value details. Saving creates a separate CSV with:
 3. every original template row below them.
 
 The selected template is never opened for writing. Existing output files are
-only replaced after an explicit GUI confirmation.
+only replaced after an explicit GUI confirmation. If the template changes
+after a preview, saving is rejected until a fresh scrape is completed.
 
 ## Install on Windows
 
@@ -52,9 +53,10 @@ In the app:
 4. Select **Preview / Scrape** and review the counts and first rows.
 5. Select **Save output**.
 
-The app always normalizes the starting page to page 1, retains the URL's page
-size, and follows the site's enabled Next link until the module is complete.
-Use **Stop** to cancel between browser actions.
+The app always normalizes the starting page to page 1, uses the URL's requested
+page size up to NERIS's 500-row maximum, and follows the site's enabled Next
+link until the module is complete. Use **Stop** to cancel between browser
+actions.
 
 ## Test
 

@@ -235,7 +235,7 @@ class DdBulkExportApp:
             signature = (
                 normalized_url,
                 _path_signature(str(template.path)),
-                _file_signature(template.path),
+                template.sha256,
             )
         except (InvalidNerisUrl, ValueError, OSError) as exc:
             messagebox.showerror("Cannot start export", str(exc), parent=self.root)
@@ -319,6 +319,7 @@ class DdBulkExportApp:
                 output,
                 self._result.rows,
                 overwrite=overwrite,
+                expected_template_sha256=self._result_signature[2],
             )
         except (ValueError, OSError, OutputExistsError, UnsafeOutputError) as exc:
             messagebox.showerror("Could not save output", str(exc), parent=self.root)

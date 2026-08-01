@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import io
 import os
 import tempfile
 from dataclasses import dataclass
@@ -32,6 +34,7 @@ class OutputWriteError(OSError):
 class TemplateCsv:
     path: Path
     rows: tuple[dict[str, str], ...]
+    sha256: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,14 +62,16 @@ def _paths_identify_same_file(first: Path, second: Path) -> bool:
 
 
 def read_template(path: str | Path) -> TemplateCsv:
-    """Read a template while enforcing the exact fixed header and row width."""
+    """Read one byte snapshot while enforcing the exact header and row width."""
 
     template_path = Path(path).expanduser()
     if not template_path.is_file():
         raise CsvTemplateError(f"Template CSV does not exist: {template_path}")
 
     try:
-        with template_path.open("r", encoding="utf-8-sig", newline="") as handle:
+        raw_bytes = template_path.read_bytes()
+        decoded = raw_bytes.decode("utf-8-sig")
+        with io.StringIO(decoded, newline="") as handle:
             reader = csv.DictReader(handle)
             actual_header = tuple(reader.fieldnames or ())
             if actual_header != CSV_COLUMNS:
@@ -89,7 +94,11 @@ def read_template(path: str | Path) -> TemplateCsv:
     except csv.Error as exc:
         raise CsvTemplateError(f"Template CSV could not be parsed: {exc}") from exc
 
-    return TemplateCsv(path=template_path.resolve(), rows=tuple(rows))
+    return TemplateCsv(
+        path=template_path.resolve(),
+        rows=tuple(rows),
+        sha256=hashlib.sha256(raw_bytes).hexdigest(),
+    )
 
 
 def validate_output_path(
@@ -123,10 +132,19 @@ def write_merged_csv(
     scraped_rows: Iterable[DictionaryRow],
     *,
     overwrite: bool = False,
+    expected_template_sha256: str | None = None,
 ) -> WriteSummary:
     """Write header + scraped rows + original rows without touching the template."""
 
     template = read_template(template_path)
+    if (
+        expected_template_sha256 is not None
+        and template.sha256 != expected_template_sha256
+    ):
+        raise CsvTemplateError(
+            "Template CSV changed since the preview was created; scrape again "
+            "before saving."
+        )
     output = validate_output_path(
         template.path,
         output_path,
