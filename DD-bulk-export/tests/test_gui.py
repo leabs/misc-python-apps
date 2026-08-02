@@ -15,10 +15,11 @@ from dd_bulk_export.gui import (
     default_paths,
 )
 from dd_bulk_export.launcher import _local_python
-from dd_bulk_export.models import ScrapeResult
+from dd_bulk_export.models import BatchScrapeResult, ScrapeResult
 from dd_bulk_export.csv_io import TemplateCsv, WriteSummary
 from dd_bulk_export.scraper import build_term_row
 from dd_bulk_export.scraper import normalize_start_url
+from dd_bulk_export.scraper import normalize_start_urls
 
 
 def test_gui_defaults_use_separate_template_and_output_paths(tmp_path: Path) -> None:
@@ -47,6 +48,10 @@ def _result() -> ScrapeResult:
         value_count=0,
         accordion_count=0,
     )
+
+
+def _batch() -> BatchScrapeResult:
+    return BatchScrapeResult((_result(),))
 
 
 class _Var:
@@ -93,12 +98,14 @@ def test_worker_queues_success_without_touching_tk(
 
     monkeypatch.setattr(gui_module, "NerisScraper", FakeScraper)
     app = _bare_app()
-    signature = (result.source_url, "template", "digest")
+    signature = ((result.source_url,), "template", "digest")
 
-    app._scrape_worker(result.source_url, signature, app._cancel_event)
+    app._scrape_worker((result.source_url,), signature, app._cancel_event)
 
-    assert app._messages.get_nowait() == ("log", "working")
-    assert app._messages.get_nowait() == ("result", (result, signature))
+    assert app._messages.get_nowait() == ("progress", (1, 1, result.source_url))
+    assert app._messages.get_nowait() == ("log", "URL 1/1: working")
+    assert app._messages.get_nowait() == ("log", "URL 1/1 complete: 1 rows.")
+    assert app._messages.get_nowait() == ("result", (_batch(), signature))
 
 
 def test_stop_result_race_discards_completed_worker_result(
@@ -113,14 +120,68 @@ def test_stop_result_race_discards_completed_worker_result(
 
     monkeypatch.setattr(gui_module, "NerisScraper", FakeScraper)
     app = _bare_app()
-    signature = (result.source_url, "template", "digest")
+    signature = ((result.source_url,), "template", "digest")
 
-    app._scrape_worker(result.source_url, signature, app._cancel_event)
+    app._scrape_worker((result.source_url,), signature, app._cancel_event)
 
+    assert app._messages.get_nowait()[0] == "progress"
     assert app._messages.get_nowait() == (
         "cancelled",
         "Scrape stopped by user.",
     )
+
+
+def test_later_url_failure_exposes_url_and_never_queues_partial_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _result()
+    second_url = normalize_start_url(
+        "https://neris.fsri.org/data-dictionary?module=core-entity"
+    )
+
+    calls = 0
+
+    class FakeScraper:
+        def scrape(self, _url: str, *, progress, cancel_event) -> ScrapeResult:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("render drift")
+            return result
+
+    monkeypatch.setattr(gui_module, "NerisScraper", FakeScraper)
+    app = _bare_app()
+    urls = (result.source_url, second_url)
+    app._scrape_worker(urls, (urls, "template", "digest"), app._cancel_event)
+    messages = list(app._messages.queue)
+    assert not any(kind == "result" for kind, _payload in messages)
+    kind, message = messages[-1]
+    assert kind == "error"
+    assert "URL 2/2 failed" in message
+    assert second_url in message
+
+
+def test_cancel_after_first_url_prevents_second_browser_launch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _result()
+    second_url = normalize_start_url(
+        "https://neris.fsri.org/data-dictionary?module=core-entity"
+    )
+    calls: list[str] = []
+
+    class FakeScraper:
+        def scrape(self, url: str, *, progress, cancel_event) -> ScrapeResult:
+            calls.append(url)
+            cancel_event.set()
+            return result
+
+    monkeypatch.setattr(gui_module, "NerisScraper", FakeScraper)
+    app = _bare_app()
+    urls = (result.source_url, second_url)
+    app._scrape_worker(urls, (urls, "template", "digest"), app._cancel_event)
+    assert calls == [result.source_url]
+    assert not any(kind == "result" for kind, _payload in app._messages.queue)
 
 
 def test_stale_result_is_not_enabled_for_save() -> None:
@@ -131,13 +192,13 @@ def test_stale_result_is_not_enabled_for_save() -> None:
     app._append_log = logs.append  # type: ignore[method-assign]
     app._set_busy = lambda _busy: None  # type: ignore[method-assign]
     app._current_signature = lambda: (  # type: ignore[method-assign]
-        "different",
+        ("different",),
         "template",
         "digest",
     )
-    signature = (_result().source_url, "template", "digest")
+    signature = ((_result().source_url,), "template", "digest")
 
-    app._handle_result(_result(), signature)
+    app._handle_result(_batch(), signature)
 
     assert app._result is None
     assert app.save_button.state != "normal"
@@ -159,8 +220,8 @@ def test_existing_output_requires_confirmation(
 ) -> None:
     output = tmp_path / "existing.csv"
     output.write_text("existing", encoding="utf-8")
-    result = _result()
-    signature = (result.source_url, "template", "digest")
+    result = _batch()
+    signature = (result.source_urls, "template", "digest")
     app = _bare_app()
     app._result = result
     app._result_signature = signature
@@ -190,8 +251,8 @@ def test_fresh_output_save_calls_writer_and_updates_status(
 ) -> None:
     output = tmp_path / "new.csv"
     template = tmp_path / "template.csv"
-    result = _result()
-    signature = (result.source_url, "template", "digest")
+    result = _batch()
+    signature = (result.source_urls, "template", "digest")
     app = _bare_app()
     app._result = result
     app._result_signature = signature
@@ -243,9 +304,9 @@ def test_template_change_during_overwrite_confirmation_blocks_save(
     shutil.copyfile(app_directory / "dd-test-template.csv", template)
     output.write_bytes(b"keep existing output")
     original_template = template.read_bytes()
-    result = _result()
+    result = _batch()
     signature = (
-        result.source_url,
+        result.source_urls,
         str(template.resolve()).casefold(),
         _file_signature(template),
     )
@@ -325,15 +386,15 @@ def test_start_scrape_wires_validated_inputs_to_worker(
 
     assert app._busy
     assert app._worker.started  # type: ignore[union-attr]
-    assert app._worker.args[0] == normalize_start_url(BATTERY_FIXTURE_URL)  # type: ignore[union-attr]
+    assert app._worker.args[0] == normalize_start_urls(BATTERY_FIXTURE_URL)  # type: ignore[union-attr]
     assert app._worker.name == "neris-dd-scraper"  # type: ignore[union-attr]
 
 
 def test_poll_messages_dispatches_completed_result() -> None:
     app = _bare_app()
-    result = _result()
-    signature = (result.source_url, "template", "digest")
-    handled: list[tuple[ScrapeResult, tuple[str, str, str]]] = []
+    result = _batch()
+    signature = (result.source_urls, "template", "digest")
+    handled: list[tuple[BatchScrapeResult, tuple[tuple[str, ...], str, str]]] = []
     app._messages.put(("result", (result, signature)))
     app._handle_result = lambda value, value_signature: handled.append(  # type: ignore[method-assign]
         (value, value_signature)

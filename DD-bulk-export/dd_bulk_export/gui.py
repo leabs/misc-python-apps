@@ -21,12 +21,12 @@ from .csv_io import (
     validate_output_path,
     write_merged_csv,
 )
-from .models import CSV_COLUMNS, ScrapeResult
+from .models import BatchScrapeResult, CSV_COLUMNS
 from .scraper import (
     InvalidNerisUrl,
     NerisScraper,
     ScrapeCancelled,
-    normalize_start_url,
+    normalize_start_urls,
 )
 
 
@@ -67,7 +67,6 @@ class DdBulkExportApp:
 
         app_directory = Path(__file__).resolve().parents[1]
         template, output = default_paths(app_directory)
-        self.url_var = tk.StringVar(value=BATTERY_FIXTURE_URL)
         self.template_var = tk.StringVar(value=str(template))
         self.output_var = tk.StringVar(value=str(output))
         self.status_var = tk.StringVar(value="Ready to scrape.")
@@ -77,11 +76,10 @@ class DdBulkExportApp:
         self._worker: threading.Thread | None = None
         self._busy = False
         self._closing = False
-        self._result: ScrapeResult | None = None
-        self._result_signature: tuple[str, str, str] | None = None
+        self._result: BatchScrapeResult | None = None
+        self._result_signature: tuple[tuple[str, ...], str, str] | None = None
 
         self._build_layout()
-        self.url_var.trace_add("write", self._input_changed)
         self.template_var.trace_add("write", self._input_changed)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(self.POLL_INTERVAL_MS, self._poll_messages)
@@ -94,11 +92,13 @@ class DdBulkExportApp:
         input_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 6))
         input_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(input_frame, text="NERIS URL").grid(
+        ttk.Label(input_frame, text="NERIS URLs\n(one per line)").grid(
             row=0, column=0, sticky="w", padx=(0, 10), pady=4
         )
-        self.url_entry = ttk.Entry(input_frame, textvariable=self.url_var)
+        self.url_entry = ScrolledText(input_frame, height=5, wrap="none")
+        self.url_entry.insert("1.0", BATTERY_FIXTURE_URL)
         self.url_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=4)
+        self.url_entry.bind("<KeyRelease>", self._input_changed)
 
         ttk.Label(input_frame, text="Template CSV").grid(
             row=1, column=0, sticky="w", padx=(0, 10), pady=4
@@ -214,9 +214,14 @@ class DdBulkExportApp:
             self.status_var.set("Inputs changed; scrape again to refresh the preview.")
             self._set_preview("")
 
-    def _current_signature(self) -> tuple[str, str, str]:
+    def _url_text(self) -> str:
+        if hasattr(self, "url_entry"):
+            return self.url_entry.get("1.0", "end-1c")
+        return self.url_var.get()  # compatibility for isolated unit-test apps
+
+    def _current_signature(self) -> tuple[tuple[str, ...], str, str]:
         return (
-            normalize_start_url(self.url_var.get()),
+            normalize_start_urls(self._url_text()),
             _path_signature(self.template_var.get()),
             _file_signature(self.template_var.get()),
         )
@@ -225,7 +230,7 @@ class DdBulkExportApp:
         if self._busy:
             return
         try:
-            normalized_url = normalize_start_url(self.url_var.get())
+            normalized_urls = normalize_start_urls(self._url_text())
             template = read_template(self.template_var.get())
             validate_output_path(
                 template.path,
@@ -233,7 +238,7 @@ class DdBulkExportApp:
                 allow_existing=True,
             )
             signature = (
-                normalized_url,
+                normalized_urls,
                 _path_signature(str(template.path)),
                 template.sha256,
             )
@@ -247,14 +252,15 @@ class DdBulkExportApp:
         self._cancel_event = threading.Event()
         self._set_busy(True)
         self._set_preview("")
-        self.status_var.set("Scraping NERIS…")
+        self.status_var.set(f"Scraping URL 1 of {len(normalized_urls)}…")
         self._append_log(
-            f"Starting scrape. Template contains {len(template.rows)} existing rows."
+            f"Starting {len(normalized_urls)}-URL batch. Template contains "
+            f"{len(template.rows)} existing rows."
         )
         cancel_event = self._cancel_event
         self._worker = threading.Thread(
             target=self._scrape_worker,
-            args=(normalized_url, signature, cancel_event),
+            args=(normalized_urls, signature, cancel_event),
             name="neris-dd-scraper",
             daemon=True,
         )
@@ -262,16 +268,38 @@ class DdBulkExportApp:
 
     def _scrape_worker(
         self,
-        normalized_url: str,
-        signature: tuple[str, str, str],
+        normalized_urls: tuple[str, ...],
+        signature: tuple[tuple[str, ...], str, str],
         cancel_event: threading.Event,
     ) -> None:
         try:
-            result = NerisScraper().scrape(
-                normalized_url,
-                progress=lambda message: self._messages.put(("log", message)),
-                cancel_event=cancel_event,
-            )
+            results = []
+            total = len(normalized_urls)
+            for index, normalized_url in enumerate(normalized_urls, start=1):
+                if cancel_event.is_set():
+                    raise ScrapeCancelled("Batch stopped by user.")
+                self._messages.put(("progress", (index, total, normalized_url)))
+                try:
+                    result = NerisScraper().scrape(
+                        normalized_url,
+                        progress=lambda message, i=index, n=total: self._messages.put(
+                            ("log", f"URL {i}/{n}: {message}")
+                        ),
+                        cancel_event=cancel_event,
+                    )
+                except ScrapeCancelled:
+                    raise
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"URL {index}/{total} failed ({normalized_url}): {exc}"
+                    ) from exc
+                if cancel_event.is_set():
+                    raise ScrapeCancelled("Scrape stopped by user.")
+                results.append(result)
+                self._messages.put(
+                    ("log", f"URL {index}/{total} complete: {len(result.rows)} rows.")
+                )
+            result = BatchScrapeResult(tuple(results))
             if cancel_event.is_set():
                 self._messages.put(("cancelled", "Scrape stopped by user."))
             else:
@@ -343,6 +371,10 @@ class DdBulkExportApp:
                 kind, payload = self._messages.get_nowait()
                 if kind == "log":
                     self._append_log(str(payload))
+                elif kind == "progress":
+                    index, total, url = payload
+                    self.status_var.set(f"Scraping URL {index} of {total}…")
+                    self._append_log(f"URL {index}/{total}: {url}")
                 elif kind == "result":
                     result, signature = payload
                     self._handle_result(result, signature)
@@ -364,7 +396,9 @@ class DdBulkExportApp:
             self.root.after(self.POLL_INTERVAL_MS, self._poll_messages)
 
     def _handle_result(
-        self, result: ScrapeResult, signature: tuple[str, str, str]
+        self,
+        result: BatchScrapeResult,
+        signature: tuple[tuple[str, ...], str, str],
     ) -> None:
         self._set_busy(False)
         if self._closing or self._cancel_event.is_set():
@@ -384,11 +418,11 @@ class DdBulkExportApp:
         self._result_signature = signature
         self.save_button.configure(state="normal")
         self.status_var.set(
-            f"Preview ready: {result.term_count} terms + {result.value_count} values."
+            f"Preview ready: {len(result.source_urls)} URLs, {len(result.rows)} rows."
         )
         self._set_preview(self._format_preview(result))
 
-    def _format_preview(self, result: ScrapeResult) -> str:
+    def _format_preview(self, result: BatchScrapeResult) -> str:
         stream = io.StringIO(newline="")
         writer = csv.DictWriter(
             stream,
@@ -400,8 +434,9 @@ class DdBulkExportApp:
         remaining = len(result.rows) - 25
         suffix = f"\n… {remaining} more scraped rows …\n" if remaining > 0 else ""
         return (
-            f"Scraped {result.term_count} terms and {result.value_count} values "
-            f"from {result.pages_visited} page(s).\n"
+            f"Scraped {len(result.rows)} rows from {len(result.source_urls)} URL(s): "
+            f"{result.term_count} terms and {result.value_count} values "
+            f"across {result.pages_visited} page(s).\n"
             "The saved CSV will put all scraped rows above every template row.\n\n"
             f"{stream.getvalue()}{suffix}"
         )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dd_bulk_export.models import CSV_COLUMNS, DictionaryRow, ScrapeResult
+from dd_bulk_export.models import BatchScrapeResult, CSV_COLUMNS, DictionaryRow, ScrapeResult
 
 
 def make_term() -> DictionaryRow:
@@ -70,3 +70,18 @@ def test_scrape_result_validates_row_counts() -> None:
             value_count=1,
             accordion_count=1,
         )
+
+
+def test_batch_result_preserves_order_and_totals() -> None:
+    first = ScrapeResult("https://neris.fsri.org/data-dictionary?module=one", (make_term(),), 1, 1, 0, 0)
+    second = ScrapeResult("https://neris.fsri.org/data-dictionary?module=two", (make_term(),), 2, 1, 0, 0)
+    batch = BatchScrapeResult((first, second))
+    assert batch.source_urls == (first.source_url, second.source_url)
+    assert batch.rows == first.rows + second.rows
+    assert batch.pages_visited == 3
+
+
+def test_batch_result_rejects_duplicate_urls() -> None:
+    result = ScrapeResult("https://neris.fsri.org/data-dictionary?module=one", (make_term(),), 1, 1, 0, 0)
+    with pytest.raises(ValueError, match="duplicate"):
+        BatchScrapeResult((result, result))

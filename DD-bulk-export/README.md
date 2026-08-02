@@ -1,14 +1,14 @@
 # DD Bulk Export
 
-DD Bulk Export is a small Tkinter app that captures a complete NERIS
-data-dictionary module and adds it to an existing fixed-schema CSV.
+DD Bulk Export is a small Tkinter app that captures one or more complete NERIS
+data-dictionary modules and adds them to an existing fixed-schema CSV.
 
 The scraper opens every outer **Values** accordion and every nested value
 accordion, follows enabled next-page links, and collects both base terms and
 their Description/Definition value details. Saving creates a separate CSV with:
 
 1. the exact 11-column template header;
-2. all newly scraped rows; and
+2. all newly scraped rows, grouped in the same order as the supplied URLs; and
 3. every original template row below them.
 
 The selected template is never opened for writing. Existing output files are
@@ -17,14 +17,13 @@ after a preview, saving is rejected until a fresh scrape is completed.
 
 ## Install on Windows
 
-From this directory:
+From this directory (activation is not required):
 
 ```powershell
 py -3 --version
 py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m playwright install chromium
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m playwright install chromium
 ```
 
 The reported Python version must be 3.10 or newer.
@@ -35,7 +34,7 @@ also tries an installed Google Chrome and then Microsoft Edge.
 ## Run
 
 ```powershell
-python app.py
+.\.venv\Scripts\python.exe app.py
 ```
 
 The repository's root app picker can also launch this directory through its
@@ -45,8 +44,9 @@ Python interpreter.
 
 In the app:
 
-1. Paste any public `https://neris.fsri.org/data-dictionary` URL containing a
-   `module` query value.
+1. Paste one or more public `https://neris.fsri.org/data-dictionary` URLs,
+   one per line. Blank lines are ignored; each URL must contain a `module`
+   query value, and normalized duplicates are rejected.
 2. Choose the baseline CSV. The supplied `dd-test-template.csv` is selected by
    default.
 3. Choose a different `.csv` output path.
@@ -56,21 +56,23 @@ In the app:
 The app always normalizes the starting page to page 1, uses the URL's requested
 page size up to NERIS's 500-row maximum, and follows the site's enabled Next
 link until the module is complete. Use **Stop** to cancel between browser
-actions.
+actions. URLs are scraped sequentially. Any invalid URL, scrape failure, page
+drift, or Stop request discards the whole batch preview and leaves Save
+disabled; no partial batch is written.
 
 ## Test
 
 Install the development requirements, then run the package suite:
 
 ```powershell
-python -m pip install -r requirements-dev.txt
-python -m pytest
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest
 ```
 
 The live browser fixture is opt-in so routine tests remain deterministic:
 
 ```powershell
-python -m pytest --run-live
+.\.venv\Scripts\python.exe -m pytest --run-live
 ```
 
 ## Output schema

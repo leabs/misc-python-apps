@@ -14,6 +14,7 @@ from dd_bulk_export.scraper import (
     build_value_row,
     module_parts_from_badges,
     normalize_start_url,
+    normalize_start_urls,
     source_sheet_name,
 )
 
@@ -82,6 +83,36 @@ def test_empty_optional_filters_are_removed() -> None:
     query = parse_qs(urlsplit(normalized).query, keep_blank_values=True)
     assert "search" not in query
     assert "expanded" not in query
+
+
+def test_url_list_ignores_blanks_and_preserves_order() -> None:
+    core = "https://neris.fsri.org/data-dictionary?module=core-entity"
+    battery = "https://neris.fsri.org/data-dictionary?module=incident-analysis-battery-incident"
+    assert normalize_start_urls(f"\n {battery}\n\n{core}\n") == (
+        normalize_start_url(battery),
+        normalize_start_url(core),
+    )
+
+
+def test_url_list_rejects_normalized_duplicates_with_lines() -> None:
+    first = "https://neris.fsri.org/data-dictionary?module=core-entity&page=9"
+    second = "https://neris.fsri.org/data-dictionary?page=1&pageSize=100&module=core-entity"
+    with pytest.raises(InvalidNerisUrl, match=r"line 2.*line 1"):
+        normalize_start_urls(f"{first}\n{second}")
+
+
+def test_url_list_reports_invalid_line_before_browser_work() -> None:
+    valid = "https://neris.fsri.org/data-dictionary?module=core-entity"
+    with pytest.raises(InvalidNerisUrl, match="URL on line 2"):
+        normalize_start_urls(f"{valid}\nhttps://evil.example/")
+
+
+def test_url_list_has_no_five_url_cap() -> None:
+    urls = "\n".join(
+        f"https://neris.fsri.org/data-dictionary?module=core-module-{index}"
+        for index in range(6)
+    )
+    assert len(normalize_start_urls(urls)) == 6
 
 
 def test_multiword_module_badge_maps_without_naive_url_split() -> None:

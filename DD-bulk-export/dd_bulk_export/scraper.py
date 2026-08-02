@@ -132,6 +132,38 @@ def normalize_start_url(url: str) -> str:
     )
 
 
+def normalize_start_urls(text: str) -> tuple[str, ...]:
+    """Validate and normalize a newline-delimited, ordered URL batch."""
+
+    candidates = [
+        (line_number, line.strip())
+        for line_number, line in enumerate(text.splitlines(), start=1)
+        if line.strip()
+    ]
+    if not candidates:
+        raise InvalidNerisUrl("Enter at least one NERIS data-dictionary URL.")
+
+    normalized_urls: list[str] = []
+    seen: dict[str, int] = {}
+    for line_number, candidate in candidates:
+        try:
+            normalized = normalize_start_url(candidate)
+        except InvalidNerisUrl as exc:
+            raise InvalidNerisUrl(f"URL on line {line_number}: {exc}") from exc
+
+        identity = _canonical_url(normalized)
+        duplicate_line = seen.get(identity)
+        if duplicate_line is not None:
+            raise InvalidNerisUrl(
+                "Duplicate normalized NERIS URL on line "
+                f"{line_number}; it matches line {duplicate_line}: {normalized}"
+            )
+        seen[identity] = line_number
+        normalized_urls.append(normalized)
+
+    return tuple(normalized_urls)
+
+
 def _module_filter(url: str) -> str:
     _, _, module = _validated_parts(url)
     return module

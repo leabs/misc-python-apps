@@ -102,3 +102,41 @@ class ScrapeResult:
             raise ValueError("Scrape counts cannot be negative.")
         if len(self.rows) != self.term_count + self.value_count:
             raise ValueError("Row count does not match term and value counts.")
+
+
+@dataclass(frozen=True, slots=True)
+class BatchScrapeResult:
+    """Successful, ordered results for one complete multi-URL scrape."""
+
+    results: tuple[ScrapeResult, ...]
+
+    def __post_init__(self) -> None:
+        if not self.results:
+            raise ValueError("A batch scrape result must include at least one URL.")
+        source_urls = self.source_urls
+        if len(set(source_urls)) != len(source_urls):
+            raise ValueError("A batch scrape result cannot contain duplicate URLs.")
+
+    @property
+    def source_urls(self) -> tuple[str, ...]:
+        return tuple(result.source_url for result in self.results)
+
+    @property
+    def rows(self) -> tuple[DictionaryRow, ...]:
+        return tuple(row for result in self.results for row in result.rows)
+
+    @property
+    def pages_visited(self) -> int:
+        return sum(result.pages_visited for result in self.results)
+
+    @property
+    def term_count(self) -> int:
+        return sum(result.term_count for result in self.results)
+
+    @property
+    def value_count(self) -> int:
+        return sum(result.value_count for result in self.results)
+
+    @property
+    def accordion_count(self) -> int:
+        return sum(result.accordion_count for result in self.results)

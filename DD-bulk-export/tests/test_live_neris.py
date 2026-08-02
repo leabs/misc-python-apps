@@ -7,6 +7,7 @@ import pytest
 
 from dd_bulk_export.csv_io import read_template, write_merged_csv
 from dd_bulk_export.gui import BATTERY_FIXTURE_URL
+from dd_bulk_export.models import BatchScrapeResult
 from dd_bulk_export.scraper import NerisScraper
 
 
@@ -90,3 +91,21 @@ def test_core_entity_fixture_and_legacy_template_drift() -> None:
     assert "Entity - Station Coverage" not in scraped_names
     assert "Entity - Coverage Set" not in scraped_names
     assert "Entity - Coverage Type" not in scraped_names
+
+
+@pytest.mark.live
+def test_battery_then_core_batch_order_and_merged_counts(tmp_path: Path) -> None:
+    battery = NerisScraper(timeout_ms=30_000).scrape(BATTERY_FIXTURE_URL)
+    core = NerisScraper(timeout_ms=30_000).scrape(CORE_ENTITY_URL)
+    batch = BatchScrapeResult((battery, core))
+    template_path = APP_DIRECTORY / "dd-test-template.csv"
+    template = read_template(template_path)
+    output_path = tmp_path / "batch-export.csv"
+    summary = write_merged_csv(template_path, output_path, batch.rows)
+    assert [len(battery.rows), len(core.rows), len(batch.rows)] == [35, 211, 246]
+    assert summary.total_rows == 322
+    with output_path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["term_id"] for row in rows[:35]] == [row.term_id for row in battery.rows]
+    assert [row["term_id"] for row in rows[35:246]] == [row.term_id for row in core.rows]
+    assert rows[246:] == list(template.rows)
