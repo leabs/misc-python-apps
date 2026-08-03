@@ -349,9 +349,20 @@ class _Content:
     def wait_for(self, **_kwargs: object) -> None:
         return None
 
+    def evaluate(self, _expression: str) -> bool:
+        return True
+
     def locator(self, selector: str) -> _Collection:
         assert selector == "p"
         return _Collection(*self.paragraphs)
+
+
+class _OuterRegion:
+    def wait_for(self, **_kwargs: object) -> None:
+        return None
+
+    def evaluate(self, _expression: str) -> bool:
+        return True
 
 
 class _Button:
@@ -359,17 +370,34 @@ class _Button:
         self.label = label
         self.expanded = "false"
         self.click_count = 0
+        self.press_count = 0
+        self.outer_region = _OuterRegion()
 
     def get_attribute(self, name: str) -> str | None:
-        return self.expanded if name == "aria-expanded" else None
+        if name == "aria-expanded":
+            return self.expanded
+        if name == "data-state":
+            return "open" if self.expanded == "true" else "closed"
+        return None
 
     def click(self) -> None:
         self.click_count += 1
-        self.expanded = "true"
+        self.expanded = "false" if self.expanded == "true" else "true"
+
+    def press(self, key: str) -> None:
+        assert key == "Enter"
+        self.press_count += 1
+        self.expanded = "false" if self.expanded == "true" else "true"
+
+    def evaluate(self, _expression: str) -> bool:
+        return self.expanded == "true"
 
     def locator(self, selector: str) -> _Collection:
-        assert selector == "span"
-        return _Collection(_Text(self.label))
+        if selector == "span":
+            return _Collection(_Text(self.label))
+        if selector == "xpath=following-sibling::*[1]":
+            return _Collection(self.outer_region)
+        raise AssertionError(f"Unexpected button selector: {selector}")
 
 
 class _ValueItem:
@@ -386,6 +414,9 @@ class _ValueItem:
     def get_attribute(self, name: str) -> str | None:
         return self.value_id if name == "id" else None
 
+    def evaluate(self, _expression: str) -> bool:
+        return True
+
     def locator(self, selector: str) -> _Collection:
         if selector == ":scope > h3 > button[aria-expanded]":
             return _Collection(self.button)
@@ -397,10 +428,16 @@ class _ValueItem:
 class _ValueTerm:
     def __init__(self, *items: _ValueItem) -> None:
         self.items = items
+        self.outer_button = _Button("Values")
+        self.outer_region = _OuterRegion()
+        self.outer_button.outer_region = self.outer_region
 
     def locator(self, selector: str) -> _Collection:
-        assert selector == scraper_module.VALUE_ITEM_SELECTOR
-        return _Collection(*self.items)
+        if selector == scraper_module.VALUE_ITEM_SELECTOR:
+            return _Collection(*self.items)
+        if selector == ":scope > div > button[aria-expanded]":
+            return _Collection(self.outer_button)
+        raise AssertionError(f"Unexpected value-term selector: {selector}")
 
 
 class _ModuleLabel(_Text):
@@ -458,6 +495,70 @@ class _TermPage:
         return _Collection(self.term)
 
 
+class _NavigationResponse:
+    status = 200
+
+
+class _VisibleNavigationTerm(_Text):
+    def wait_for(self, **_kwargs: object) -> None:
+        return None
+
+    def evaluate(self, _expression: str) -> bool:
+        return True
+
+
+class _NavigationPage:
+    def __init__(self) -> None:
+        self.wait_expression: str | None = None
+        self.wait_timeout: int | None = None
+
+    def goto(self, *_args: object, **_kwargs: object) -> _NavigationResponse:
+        return _NavigationResponse()
+
+    def locator(self, selector: str) -> _Collection:
+        assert selector == scraper_module.TERM_SELECTOR
+        return _Collection(_VisibleNavigationTerm("Term"))
+
+    def wait_for_function(self, expression: str, *, timeout: int) -> None:
+        self.wait_expression = expression
+        self.wait_timeout = timeout
+
+
+def test_navigation_waits_for_bounded_document_completion() -> None:
+    page = _NavigationPage()
+
+    NerisScraper(timeout_ms=30_000)._navigate(  # type: ignore[arg-type]
+        page, "https://neris.fsri.org/data-dictionary?module=core-entity"
+    )
+
+    assert page.wait_expression == "document.readyState === 'complete'"
+    assert page.wait_timeout == 5_000
+
+
+def test_navigation_fails_closed_with_literal_url_when_zero_terms_render() -> None:
+    supplied_url = (
+        "https://neris.fsri.org/data-dictionary?"
+        "module=incident-aanlysis-consumer-products"
+    )
+
+    class MissingTerm:
+        def wait_for(self, **_kwargs: object) -> None:
+            raise scraper_module.PlaywrightTimeoutError("zero terms")
+
+    class ZeroTermPage(_NavigationPage):
+        def locator(self, selector: str) -> _Collection:
+            assert selector == scraper_module.TERM_SELECTOR
+            return _Collection(MissingTerm())
+
+    with pytest.raises(
+        ScrapeError,
+        match=r"Zero terms rendered.*incident-aanlysis-consumer-products.*verify the module URL",
+    ):
+        NerisScraper(timeout_ms=1)._navigate(  # type: ignore[arg-type]
+            ZeroTermPage(), supplied_url
+        )
+
+
 def test_nested_accordion_scrape_clicks_and_maps_every_value() -> None:
     first = _ValueItem(
         "Parent-ONE",
@@ -480,7 +581,8 @@ def test_nested_accordion_scrape_clicks_and_maps_every_value() -> None:
     )
 
     assert outer_button.click_count == 1
-    assert first.button.click_count == second.button.click_count == 1
+    assert first.button.click_count == second.button.click_count == 0
+    assert first.button.press_count == second.button.press_count == 1
     assert [row.term_id for row in rows] == ["Parent-ONE", "Parent-TWO"]
     assert rows[0].description == "First, description"
     assert rows[0].value_definition == "First definition\nsecond line"
@@ -499,6 +601,9 @@ def test_outer_accordion_gets_one_bounded_hydration_retry() -> None:
                 raise scraper_module.PlaywrightTimeoutError("not hydrated")
             item.wait_for(**kwargs)
 
+        def evaluate(self, expression: str) -> bool:
+            return item.evaluate(expression)
+
     class FlakyCollection(_Collection):
         @property
         def first(self) -> object:
@@ -506,12 +611,14 @@ def test_outer_accordion_gets_one_bounded_hydration_retry() -> None:
 
     class FlakyTerm(_ValueTerm):
         def locator(self, selector: str) -> _Collection:
-            assert selector == scraper_module.VALUE_ITEM_SELECTOR
-            return FlakyCollection(item)
+            if selector == scraper_module.VALUE_ITEM_SELECTOR:
+                return FlakyCollection(item)
+            return super().locator(selector)
 
-    outer_button = _Button("Available choices")
+    term = FlakyTerm(item)
+    outer_button = term.outer_button
     rows = NerisScraper()._scrape_values(  # type: ignore[arg-type]
-        FlakyTerm(item),
+        term,
         outer_button,
         parent_title="Parent",
         parent_id="Parent",
@@ -540,13 +647,15 @@ def test_outer_accordion_double_hydration_failure_fails_closed() -> None:
 
     class EmptyTerm(_ValueTerm):
         def locator(self, selector: str) -> _Collection:
-            assert selector == scraper_module.VALUE_ITEM_SELECTOR
-            return EmptyCollection()
+            if selector == scraper_module.VALUE_ITEM_SELECTOR:
+                return EmptyCollection()
+            return super().locator(selector)
 
-    outer_button = _Button("Available choices")
+    term = EmptyTerm(item)
+    outer_button = term.outer_button
     with pytest.raises(ScrapeError, match="did not render its entries"):
         NerisScraper()._scrape_values(  # type: ignore[arg-type]
-            EmptyTerm(item),
+            term,
             outer_button,
             parent_title="Battery Incident - Incident Indoor Outdoor",
             parent_id="Battery-Incident-Incident-Indoor-Outdoor",
@@ -566,6 +675,8 @@ def test_nested_accordion_gets_one_bounded_interaction_retry() -> None:
     class FlakyContent(_Content):
         def wait_for(self, **kwargs: object) -> None:
             nonlocal attempts
+            if kwargs.get("state") == "hidden":
+                return
             attempts += 1
             if attempts == 1:
                 raise scraper_module.PlaywrightTimeoutError("still closed")
@@ -584,7 +695,7 @@ def test_nested_accordion_gets_one_bounded_interaction_retry() -> None:
     )
 
     assert attempts == 2
-    assert item.button.click_count == 3
+    assert item.button.press_count == 3
     assert [row.term_id for row in rows] == ["Parent-ONE"]
 
 
@@ -592,7 +703,9 @@ def test_nested_accordion_double_interaction_failure_fails_closed() -> None:
     item = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")
 
     class NeverVisible(_Content):
-        def wait_for(self, **_kwargs: object) -> None:
+        def wait_for(self, **kwargs: object) -> None:
+            if kwargs.get("state") == "hidden":
+                return
             raise scraper_module.PlaywrightTimeoutError("still closed")
 
     item.content = NeverVisible("Description", "Definition")
@@ -608,7 +721,36 @@ def test_nested_accordion_double_interaction_failure_fails_closed() -> None:
             cancel_event=threading.Event(),
         )
 
-    assert item.button.click_count == 3
+    assert item.button.press_count == 3
+
+
+def test_nested_long_label_uses_keyboard_when_center_click_is_intercepted() -> None:
+    long_label = (
+        "SEARCH_STRUCTUREororWINDOW_INITIATED_SEARCHororPRIOR_TO_SUPPRESSION"
+    )
+    item = _ValueItem(
+        "Incident-Actions-and-Tactics-"
+        "SEARCH_STRUCTUREororWINDOW_INITIATED_SEARCHororPRIOR_TO_SUPPRESSION",
+        long_label,
+        "Description",
+        "Definition",
+    )
+
+    rows = NerisScraper()._scrape_values(  # type: ignore[arg-type]
+        _ValueTerm(item),
+        _Button("Values"),
+        parent_title="Core Incident",
+        parent_id="Core-Incident",
+        module="core",
+        submodule="incident",
+        seen_value_ids=set(),
+        cancel_event=threading.Event(),
+    )
+
+    assert item.button.click_count == 0
+    assert item.button.press_count == 1
+    assert item.button.get_attribute("data-state") == "open"
+    assert rows[0].term_or_value_name == f"Core Incident - {long_label}"
 
 
 @pytest.mark.parametrize("missing_label", ["Description:", "Definition:"])

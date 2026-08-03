@@ -25,7 +25,7 @@ CORE_ENTITY_URL = (
 )
 CONSUMER_PRODUCTS_URL = (
     "https://neris.fsri.org/data-dictionary"
-    "?page=1&pageSize=100&module=incident-aanlysis-consumer-products"
+    "?page=1&pageSize=100&module=incident-analysis-consumer-products"
 )
 SHARED_TACTICAL_TIMESTAMPS_URL = (
     "https://neris.fsri.org/data-dictionary"

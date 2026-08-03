@@ -8,11 +8,11 @@
       <div class="prose"><p>How the product contributed.</p></div>
       <div><div><span>modules:</span><div>Incident Analysis-Consumer Products</div></div></div>
       <div>
-        <button type="button" aria-expanded="false"><h3>Available choices</h3></button>
-        <div role="region" hidden>
+        <button type="button" aria-expanded="false" data-state="closed"><h3>Available choices</h3></button>
+        <div role="region" data-state="closed" hidden>
           <div data-orientation="vertical" id="Consumer-Products-Product-Contribution-IGNITION">
-            <h3><button type="button" aria-expanded="false"><span><span>IGNITION</span></span></button></h3>
-            <div role="region" hidden>
+            <h3><button type="button" aria-expanded="false" data-state="closed"><span><span>IGNITION</span></span></button></h3>
+            <div role="region" data-state="closed" hidden>
               <p><span>Description:</span> Ignition</p>
               <p><span>Definition:</span> The product contributed to ignition.</p>
             </div>
@@ -24,9 +24,14 @@
   <script>
     for (const button of document.querySelectorAll('button[aria-expanded]')) {
       button.addEventListener('click', () => {
-        button.setAttribute('aria-expanded', 'true');
+        const opening = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        button.setAttribute('data-state', opening ? 'open' : 'closed');
         const region = button.parentElement.nextElementSibling || button.nextElementSibling;
-        if (region) region.hidden = false;
+        if (region) {
+          region.hidden = !opening;
+          region.setAttribute('data-state', opening ? 'open' : 'closed');
+        }
       });
     }
   </script>
