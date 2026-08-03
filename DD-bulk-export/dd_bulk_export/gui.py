@@ -30,12 +30,6 @@ from .scraper import (
 )
 
 
-BATTERY_FIXTURE_URL = (
-    "https://neris.fsri.org/data-dictionary"
-    "?page=1&pageSize=100&module=incident-analysis-battery-incident"
-)
-
-
 def default_paths(app_directory: Path) -> tuple[Path, Path]:
     template = app_directory / "dd-test-template.csv"
     output = app_directory / "dd-test-template__export.csv"
@@ -96,7 +90,6 @@ class DdBulkExportApp:
             row=0, column=0, sticky="w", padx=(0, 10), pady=4
         )
         self.url_entry = ScrolledText(input_frame, height=5, wrap="none")
-        self.url_entry.insert("1.0", BATTERY_FIXTURE_URL)
         self.url_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=4)
         self.url_entry.bind("<KeyRelease>", self._input_changed)
 

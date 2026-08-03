@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from playwright.sync_api import sync_playwright
 
 import dd_bulk_export.scraper as scraper_module
 from dd_bulk_export.scraper import (
@@ -65,14 +67,14 @@ def test_missing_page_size_defaults_to_100() -> None:
     assert parse_qs(urlsplit(normalized).query)["pageSize"] == ["100"]
 
 
-def test_page_size_is_capped_to_the_neris_maximum() -> None:
+def test_supplied_positive_page_size_is_preserved() -> None:
     normalized = normalize_start_url(
         "https://neris.fsri.org/data-dictionary"
         "?module=core-entity&page=9&pageSize=501"
     )
     query = parse_qs(urlsplit(normalized).query)
     assert query["page"] == ["1"]
-    assert query["pageSize"] == ["500"]
+    assert query["pageSize"] == ["501"]
 
 
 def test_empty_optional_filters_are_removed() -> None:
@@ -133,12 +135,12 @@ def test_matching_badge_is_selected_when_term_has_multiple_modules() -> None:
     ) == ("incident-analysis", "battery-incident")
 
 
-def test_single_mismatched_module_badge_is_rejected() -> None:
-    with pytest.raises(ScrapeError, match="Could not map module filter"):
-        module_parts_from_badges(
-            ["Core Entity"],
-            "incident-analysis-battery-incident",
-        )
+def test_single_rendered_module_is_authoritative_without_a_whitelist() -> None:
+    assert module_parts_from_badges(
+        ["Incident Analysis-Consumer Products"],
+        "incident-aanlysis-consumer-products",
+        "Consumer Products - Consumer Product Type",
+    ) == ("incident-analysis", "consumer-products")
 
 
 def test_term_and_value_mapping_match_fixed_csv_semantics() -> None:
@@ -435,6 +437,8 @@ class _FullTerm(_ValueTerm):
             return _Collection(_Text("Parent description"))
         if selector == "span":
             return _ModuleSpans(_ModuleLabel("Core Entity"))
+        if selector == ":scope > div > button[aria-expanded]":
+            return _Collection(self.outer_button)
         return super().locator(selector)
 
 
@@ -481,6 +485,45 @@ def test_nested_accordion_scrape_clicks_and_maps_every_value() -> None:
     assert rows[0].description == "First, description"
     assert rows[0].value_definition == "First definition\nsecond line"
     assert rows[1].description == "Café"
+
+
+def test_outer_accordion_gets_one_bounded_hydration_retry() -> None:
+    item = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")
+    attempts = 0
+
+    class FlakyFirst:
+        def wait_for(self, **kwargs: object) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise scraper_module.PlaywrightTimeoutError("not hydrated")
+            item.wait_for(**kwargs)
+
+    class FlakyCollection(_Collection):
+        @property
+        def first(self) -> object:
+            return FlakyFirst()
+
+    class FlakyTerm(_ValueTerm):
+        def locator(self, selector: str) -> _Collection:
+            assert selector == scraper_module.VALUE_ITEM_SELECTOR
+            return FlakyCollection(item)
+
+    outer_button = _Button("Available choices")
+    rows = NerisScraper()._scrape_values(  # type: ignore[arg-type]
+        FlakyTerm(item),
+        outer_button,
+        parent_title="Parent",
+        parent_id="Parent",
+        module="incident-analysis",
+        submodule="consumer-products",
+        seen_value_ids=set(),
+        cancel_event=threading.Event(),
+    )
+
+    assert attempts == 2
+    assert outer_button.click_count == 3
+    assert [row.term_id for row in rows] == ["Parent-ONE"]
 
 
 @pytest.mark.parametrize("missing_label", ["Description:", "Definition:"])
@@ -533,6 +576,35 @@ def test_page_scrape_requires_rendered_term_description() -> None:
             progress=lambda _message: None,
             cancel_event=threading.Event(),
         )
+
+
+def test_supplied_consumer_products_fixture_is_dom_driven() -> None:
+    fixture = Path(__file__).parent / "fixtures" / "otherpage.html"
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.goto(fixture.resolve().as_uri())
+            rows, terms, values, accordions = NerisScraper()._scrape_page(
+                page,
+                module_filter="incident-aanlysis-consumer-products",
+                seen_term_ids=set(),
+                seen_value_ids=set(),
+                progress=lambda _message: None,
+                cancel_event=threading.Event(),
+            )
+        finally:
+            browser.close()
+
+    assert (terms, values, accordions) == (1, 1, 1)
+    assert [row.term_id for row in rows] == [
+        "Consumer-Products-Product-Contribution",
+        "Consumer-Products-Product-Contribution-IGNITION",
+    ]
+    assert {(row.module, row.submodule) for row in rows} == {
+        ("incident-analysis", "consumer-products")
+    }
+    assert rows[1].value_definition == "The product contributed to ignition."
 
 
 class _PlaywrightContext:

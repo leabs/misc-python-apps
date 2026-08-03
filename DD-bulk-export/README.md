@@ -53,12 +53,17 @@ In the app:
 4. Select **Preview / Scrape** and review the counts and first rows.
 5. Select **Save output**.
 
-The app always normalizes the starting page to page 1, uses the URL's requested
-page size up to NERIS's 500-row maximum, and follows the site's enabled Next
+The app always normalizes the starting page to page 1, preserves the URL's
+positive page size and other active filters, and follows the site's enabled Next
 link until the module is complete. Use **Stop** to cancel between browser
 actions. URLs are scraped sequentially. Any invalid URL, scrape failure, page
 drift, or Stop request discards the whole batch preview and leaves Save
 disabled; no partial batch is written.
+
+The URL box starts blank: no module is a built-in preset or whitelist entry.
+Module and submodule columns are derived from each rendered term's heading and
+module metadata, so Core, Incident Analysis, Shared, and future NERIS modules
+follow the same extraction path.
 
 ## Test
 

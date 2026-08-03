@@ -6,12 +6,15 @@ from pathlib import Path
 import pytest
 
 from dd_bulk_export.csv_io import read_template, write_merged_csv
-from dd_bulk_export.gui import BATTERY_FIXTURE_URL
 from dd_bulk_export.models import BatchScrapeResult
 from dd_bulk_export.scraper import NerisScraper
 
 
 APP_DIRECTORY = Path(__file__).resolve().parents[1]
+BATTERY_FIXTURE_URL = (
+    "https://neris.fsri.org/data-dictionary"
+    "?page=1&pageSize=100&module=incident-analysis-battery-incident"
+)
 PAGINATED_BATTERY_URL = (
     "https://neris.fsri.org/data-dictionary"
     "?page=4&pageSize=5&module=incident-analysis-battery-incident"
@@ -19,6 +22,14 @@ PAGINATED_BATTERY_URL = (
 CORE_ENTITY_URL = (
     "https://neris.fsri.org/data-dictionary"
     "?page=1&pageSize=100&module=core-entity"
+)
+CONSUMER_PRODUCTS_URL = (
+    "https://neris.fsri.org/data-dictionary"
+    "?page=1&pageSize=100&module=incident-aanlysis-consumer-products"
+)
+SHARED_TACTICAL_TIMESTAMPS_URL = (
+    "https://neris.fsri.org/data-dictionary"
+    "?page=1&pageSize=100&module=shared-tactical-timestamps"
 )
 
 
@@ -109,3 +120,26 @@ def test_battery_then_core_batch_order_and_merged_counts(tmp_path: Path) -> None
     assert [row["term_id"] for row in rows[:35]] == [row.term_id for row in battery.rows]
     assert [row["term_id"] for row in rows[35:246]] == [row.term_id for row in core.rows]
     assert rows[246:] == list(template.rows)
+
+
+@pytest.mark.live
+def test_consumer_products_exact_supplied_url_is_dom_derived() -> None:
+    result = NerisScraper(timeout_ms=30_000).scrape(CONSUMER_PRODUCTS_URL)
+    assert {row.term_id for row in result.rows} >= {
+        "Consumer-Products-Consumer-Product-Type",
+        "Consumer-Products-Product-Contribution-IGNITION",
+    }
+    assert {(row.module, row.submodule) for row in result.rows} == {
+        ("incident-analysis", "consumer-products")
+    }
+
+
+@pytest.mark.live
+def test_additional_discovered_shared_module_is_dom_derived() -> None:
+    result = NerisScraper(timeout_ms=30_000).scrape(
+        SHARED_TACTICAL_TIMESTAMPS_URL
+    )
+    assert result.rows
+    assert {(row.module, row.submodule) for row in result.rows} == {
+        ("shared", "tactical-timestamps")
+    }

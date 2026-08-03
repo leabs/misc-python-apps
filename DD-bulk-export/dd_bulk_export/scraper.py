@@ -6,6 +6,7 @@ import re
 import threading
 import unicodedata
 from collections.abc import Callable, Sequence
+from difflib import SequenceMatcher
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -30,8 +31,7 @@ except ImportError:  # pragma: no cover - exercised only before dependencies ins
 NERIS_HOST = "neris.fsri.org"
 NERIS_PATH = "/data-dictionary"
 DEFAULT_PAGE_SIZE = "100"
-MAX_PAGE_SIZE = 500
-TERM_SELECTOR = "li[id].pt-8"
+TERM_SELECTOR = "li[id]:has(> h2)"
 VALUE_ITEM_SELECTOR = (
     "div[data-orientation='vertical'][id]:has(> h3 > button[aria-expanded])"
 )
@@ -118,8 +118,6 @@ def normalize_start_url(url: str) -> str:
         raise InvalidNerisUrl("pageSize must be a positive integer.") from exc
     if numeric_page_size < 1:
         raise InvalidNerisUrl("pageSize must be a positive integer.")
-    numeric_page_size = min(numeric_page_size, MAX_PAGE_SIZE)
-
     normalized_query = [
         (key, value)
         for key, value in query
@@ -257,31 +255,71 @@ def _validate_loaded_page_url(
         )
 
 
-def module_parts_from_badges(
-    badges: Sequence[str], module_filter: str
-) -> tuple[str, str]:
-    """Resolve module/submodule from rendered badges, including multiword names."""
+def _badge_parts(raw_badge: str, term_title: str) -> tuple[str, str] | None:
+    """Derive module columns from rendered metadata and the term heading."""
 
-    for raw_badge in badges:
-        match = re.match(r"^\s*(.+?)\s*[-–—]\s*(.+?)\s*$", raw_badge)
-        if match:
-            module = _slugify(match.group(1))
-            submodule = _slugify(match.group(2))
-        else:
-            words = raw_badge.split(maxsplit=1)
-            if len(words) != 2:
-                continue
-            module = _slugify(words[0])
-            submodule = _slugify(words[1])
-        if not module or not submodule:
-            continue
-        if f"{module}-{submodule}" == module_filter:
+    title_prefix = re.split(r"\s+[-–—]\s+", term_title, maxsplit=1)[0].strip()
+    submodule = _slugify(title_prefix)
+    badge = _clean_text(raw_badge)
+    if submodule and _slugify(badge).endswith(submodule):
+        suffix_match = re.search(
+            rf"(?:\s*[-–—]\s*|\s+){re.escape(title_prefix)}\s*$",
+            badge,
+            re.IGNORECASE,
+        )
+        if suffix_match:
+            module = _slugify(badge[: suffix_match.start()])
+            if module:
+                return module, submodule
+
+    match = re.match(r"^\s*(.+?)\s*[-–—]\s*(.+?)\s*$", badge)
+    if match:
+        module = _slugify(match.group(1))
+        submodule = _slugify(match.group(2))
+        if module and submodule:
             return module, submodule
 
-    rendered = ", ".join(badges) or "<missing>"
-    raise ScrapeError(
-        f"Could not map module filter '{module_filter}' to rendered badge(s): {rendered}"
+    words = badge.split(maxsplit=1)
+    if len(words) == 2:
+        module, submodule = map(_slugify, words)
+        if module and submodule:
+            return module, submodule
+    return None
+
+
+def module_parts_from_badges(
+    badges: Sequence[str], module_filter: str, term_title: str = ""
+) -> tuple[str, str]:
+    """Resolve active rendered metadata without relying on a module whitelist."""
+
+    candidates = {
+        parts
+        for raw_badge in badges
+        if (parts := _badge_parts(raw_badge, term_title)) is not None
+    }
+    if not candidates:
+        rendered = ", ".join(badges) or "<missing>"
+        raise ScrapeError(f"Could not derive module metadata from: {rendered}")
+
+    exact = [parts for parts in candidates if "-".join(parts) == module_filter]
+    if len(exact) == 1:
+        return exact[0]
+    if len(candidates) == 1:
+        return next(iter(candidates))
+
+    ranked = sorted(
+        (
+            SequenceMatcher(None, "-".join(parts), module_filter).ratio(),
+            parts,
+        )
+        for parts in candidates
     )
+    if len(ranked) > 1 and ranked[-1][0] == ranked[-2][0]:
+        rendered = ", ".join(badges)
+        raise ScrapeError(
+            f"Rendered module metadata is ambiguous for '{module_filter}': {rendered}"
+        )
+    return ranked[-1][1]
 
 
 def source_sheet_name(module: str, submodule: str) -> str:
@@ -518,7 +556,9 @@ class NerisScraper:
                 )
             description = _clean_text(description_locator.inner_text())
             badges = self._module_badges(term)
-            module, submodule = module_parts_from_badges(badges, module_filter)
+            module, submodule = module_parts_from_badges(
+                badges, module_filter, title
+            )
             page_rows.append(
                 build_term_row(
                     title=title,
@@ -529,7 +569,9 @@ class NerisScraper:
                 )
             )
 
-            values_button = term.get_by_role("button", name="Values", exact=True)
+            values_button = term.locator(
+                ":scope > div > button[aria-expanded]"
+            )
             if not values_button.count():
                 continue
             page_accordion_count += 1
@@ -580,7 +622,20 @@ class NerisScraper:
             if values_button.get_attribute("aria-expanded") != "true":
                 values_button.click()
             value_items = term.locator(VALUE_ITEM_SELECTOR)
-            value_items.first.wait_for(state="visible", timeout=self.timeout_ms)
+            try:
+                value_items.first.wait_for(
+                    state="visible", timeout=min(5_000, self.timeout_ms)
+                )
+            except PlaywrightTimeoutError:
+                # A freshly hydrated NERIS page can accept the first click before
+                # React has populated the collapsible body. Reopening once gives
+                # the same rendered control one bounded recovery opportunity.
+                if values_button.get_attribute("aria-expanded") == "true":
+                    values_button.click()
+                values_button.click()
+                value_items.first.wait_for(
+                    state="visible", timeout=self.timeout_ms
+                )
             count = value_items.count()
         except PlaywrightTimeoutError as exc:
             raise ScrapeError(

@@ -9,7 +9,6 @@ import pytest
 
 import dd_bulk_export.gui as gui_module
 from dd_bulk_export.gui import (
-    BATTERY_FIXTURE_URL,
     DdBulkExportApp,
     _file_signature,
     default_paths,
@@ -22,14 +21,18 @@ from dd_bulk_export.scraper import normalize_start_url
 from dd_bulk_export.scraper import normalize_start_urls
 
 
+BATTERY_FIXTURE_URL = (
+    "https://neris.fsri.org/data-dictionary"
+    "?page=1&pageSize=100&module=incident-analysis-battery-incident"
+)
+
+
 def test_gui_defaults_use_separate_template_and_output_paths(tmp_path: Path) -> None:
     template, output = default_paths(tmp_path)
     assert template == tmp_path / "dd-test-template.csv"
     assert output == tmp_path / "dd-test-template__export.csv"
     assert template != output
-    assert "incident-analysis-battery-incident" in normalize_start_url(
-        BATTERY_FIXTURE_URL
-    )
+    assert "incident-analysis-battery-incident" in normalize_start_url(BATTERY_FIXTURE_URL)
 
 
 def _result() -> ScrapeResult:
