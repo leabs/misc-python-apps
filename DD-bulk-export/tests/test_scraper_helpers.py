@@ -526,6 +526,39 @@ def test_outer_accordion_gets_one_bounded_hydration_retry() -> None:
     assert [row.term_id for row in rows] == ["Parent-ONE"]
 
 
+def test_outer_accordion_double_hydration_failure_fails_closed() -> None:
+    item = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")
+
+    class NeverHydrates:
+        def wait_for(self, **_kwargs: object) -> None:
+            raise scraper_module.PlaywrightTimeoutError("still empty")
+
+    class EmptyCollection(_Collection):
+        @property
+        def first(self) -> object:
+            return NeverHydrates()
+
+    class EmptyTerm(_ValueTerm):
+        def locator(self, selector: str) -> _Collection:
+            assert selector == scraper_module.VALUE_ITEM_SELECTOR
+            return EmptyCollection()
+
+    outer_button = _Button("Available choices")
+    with pytest.raises(ScrapeError, match="did not render its entries"):
+        NerisScraper()._scrape_values(  # type: ignore[arg-type]
+            EmptyTerm(item),
+            outer_button,
+            parent_title="Battery Incident - Incident Indoor Outdoor",
+            parent_id="Battery-Incident-Incident-Indoor-Outdoor",
+            module="incident-analysis",
+            submodule="battery-incident",
+            seen_value_ids=set(),
+            cancel_event=threading.Event(),
+        )
+
+    assert outer_button.click_count == 3
+
+
 @pytest.mark.parametrize("missing_label", ["Description:", "Definition:"])
 def test_nested_value_requires_both_rendered_fields(missing_label: str) -> None:
     item = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")

@@ -164,6 +164,35 @@ def test_later_url_failure_exposes_url_and_never_queues_partial_result(
     assert second_url in message
 
 
+def test_unrecovered_battery_hydration_failure_aborts_entire_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    battery = normalize_start_url(BATTERY_FIXTURE_URL)
+    later = normalize_start_url(
+        "https://neris.fsri.org/data-dictionary?module=shared-tactical-timestamps"
+    )
+    calls: list[str] = []
+
+    class FakeScraper:
+        def scrape(self, url: str, *, progress, cancel_event) -> ScrapeResult:
+            calls.append(url)
+            raise RuntimeError(
+                "Values accordion for 'Battery Incident - Incident Indoor Outdoor' "
+                "did not render its entries."
+            )
+
+    monkeypatch.setattr(gui_module, "NerisScraper", FakeScraper)
+    app = _bare_app()
+    urls = (battery, later)
+    app._scrape_worker(urls, (urls, "template", "digest"), app._cancel_event)
+    messages = list(app._messages.queue)
+
+    assert calls == [battery]
+    assert not any(kind == "result" for kind, _payload in messages)
+    assert messages[-1][0] == "error"
+    assert "Incident Indoor Outdoor" in messages[-1][1]
+
+
 def test_cancel_after_first_url_prevents_second_browser_launch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
