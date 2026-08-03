@@ -665,7 +665,18 @@ class NerisScraper:
                 if button.get_attribute("aria-expanded") != "true":
                     button.click()
                 content = item.locator(":scope > div[role='region']").first
-                content.wait_for(state="visible", timeout=self.timeout_ms)
+                try:
+                    content.wait_for(
+                        state="visible", timeout=min(5_000, self.timeout_ms)
+                    )
+                except PlaywrightTimeoutError:
+                    # NERIS can accept a nested click before the accordion's
+                    # React handler is ready. Give that same rendered control
+                    # one bounded close/reopen recovery, then fail closed.
+                    if button.get_attribute("aria-expanded") == "true":
+                        button.click()
+                    button.click()
+                    content.wait_for(state="visible", timeout=self.timeout_ms)
             except PlaywrightTimeoutError as exc:
                 raise ScrapeError(
                     f"Nested value '{value_id}' did not reveal its details."

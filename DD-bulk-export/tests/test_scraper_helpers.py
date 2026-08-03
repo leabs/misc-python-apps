@@ -559,6 +559,58 @@ def test_outer_accordion_double_hydration_failure_fails_closed() -> None:
     assert outer_button.click_count == 3
 
 
+def test_nested_accordion_gets_one_bounded_interaction_retry() -> None:
+    item = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")
+    attempts = 0
+
+    class FlakyContent(_Content):
+        def wait_for(self, **kwargs: object) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise scraper_module.PlaywrightTimeoutError("still closed")
+            super().wait_for(**kwargs)
+
+    item.content = FlakyContent("Description", "Definition")
+    rows = NerisScraper()._scrape_values(  # type: ignore[arg-type]
+        _ValueTerm(item),
+        _Button("Values"),
+        parent_title="Incident Actions and Tactics",
+        parent_id="Incident-Actions-and-Tactics",
+        module="core",
+        submodule="incident",
+        seen_value_ids=set(),
+        cancel_event=threading.Event(),
+    )
+
+    assert attempts == 2
+    assert item.button.click_count == 3
+    assert [row.term_id for row in rows] == ["Parent-ONE"]
+
+
+def test_nested_accordion_double_interaction_failure_fails_closed() -> None:
+    item = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")
+
+    class NeverVisible(_Content):
+        def wait_for(self, **_kwargs: object) -> None:
+            raise scraper_module.PlaywrightTimeoutError("still closed")
+
+    item.content = NeverVisible("Description", "Definition")
+    with pytest.raises(ScrapeError, match="did not reveal its details"):
+        NerisScraper()._scrape_values(  # type: ignore[arg-type]
+            _ValueTerm(item),
+            _Button("Values"),
+            parent_title="Incident Actions and Tactics",
+            parent_id="Incident-Actions-and-Tactics",
+            module="core",
+            submodule="incident",
+            seen_value_ids=set(),
+            cancel_event=threading.Event(),
+        )
+
+    assert item.button.click_count == 3
+
+
 @pytest.mark.parametrize("missing_label", ["Description:", "Definition:"])
 def test_nested_value_requires_both_rendered_fields(missing_label: str) -> None:
     item = _ValueItem("Parent-ONE", "ONE", "Description", "Definition")
