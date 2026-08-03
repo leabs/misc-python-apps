@@ -637,37 +637,48 @@ class NerisScraper:
     ) -> list[DictionaryRow]:
         button_selector = ":scope > div > button[aria-expanded]"
         region_selector = "xpath=following-sibling::*[1]"
+        attempt_timeout = min(5_000, self.timeout_ms)
         try:
             if values_button.get_attribute("aria-expanded") != "true":
-                values_button.click()
+                values_button.click(timeout=attempt_timeout)
             value_items = term.locator(VALUE_ITEM_SELECTOR)
             values_region = values_button.locator(region_selector).first
             try:
                 value_items.first.wait_for(
-                    state="visible", timeout=min(5_000, self.timeout_ms)
+                    state="visible", timeout=attempt_timeout
                 )
                 self._require_open_outer(
-                    values_button, values_region, value_items.first
+                    values_button,
+                    values_region,
+                    value_items.first,
+                    attempt_timeout,
                 )
             except PlaywrightTimeoutError:
                 # A freshly hydrated NERIS page can accept the first click before
                 # React has populated the collapsible body. Re-query the controls
                 # and give them exactly one bounded close/reopen recovery.
                 values_button = term.locator(button_selector).first
-                if values_button.get_attribute("aria-expanded") == "true":
-                    values_button.click()
-                    values_region.wait_for(
-                        state="hidden", timeout=min(5_000, self.timeout_ms)
-                    )
-                values_button = term.locator(button_selector).first
-                values_button.click()
-                value_items = term.locator(VALUE_ITEM_SELECTOR)
                 values_region = values_button.locator(region_selector).first
+                if values_button.get_attribute("aria-expanded") == "true":
+                    values_button.click(timeout=attempt_timeout)
+                values_button = term.locator(button_selector).first
+                values_region = values_button.locator(region_selector).first
+                values_region.wait_for(state="hidden", timeout=attempt_timeout)
+                self._require_closed(
+                    values_button, values_region, attempt_timeout
+                )
+                values_button = term.locator(button_selector).first
+                values_region = values_button.locator(region_selector).first
+                values_button.click(timeout=attempt_timeout)
+                value_items = term.locator(VALUE_ITEM_SELECTOR)
                 value_items.first.wait_for(
-                    state="visible", timeout=min(5_000, self.timeout_ms)
+                    state="visible", timeout=attempt_timeout
                 )
                 self._require_open_outer(
-                    values_button, values_region, value_items.first
+                    values_button,
+                    values_region,
+                    value_items.first,
+                    attempt_timeout,
                 )
             count = value_items.count()
         except PlaywrightTimeoutError as exc:
@@ -686,6 +697,7 @@ class NerisScraper:
             value_id = _clean_text(item.get_attribute("id"))
             button_selector = ":scope > h3 > button[aria-expanded]"
             region_selector = ":scope > div[role='region']"
+            attempt_timeout = min(5_000, self.timeout_ms)
             button = item.locator(button_selector).first
             label = _clean_text(button.locator("span").first.inner_text())
             if not value_id or not label:
@@ -701,29 +713,31 @@ class NerisScraper:
                 # center-click can land on NERIS's nested copy-link child for
                 # long labels and be consumed without toggling the accordion.
                 if button.get_attribute("aria-expanded") != "true":
-                    button.press("Enter")
+                    button.press("Enter", timeout=attempt_timeout)
                 content = item.locator(region_selector).first
                 try:
                     content.wait_for(
-                        state="visible", timeout=min(5_000, self.timeout_ms)
+                        state="visible", timeout=attempt_timeout
                     )
-                    self._require_open_nested(button, content)
+                    self._require_open_nested(button, content, attempt_timeout)
                 except PlaywrightTimeoutError:
                     # Re-query every control for the sole bounded recovery; do
                     # not retain a potentially pre-hydration locator/handle.
                     button = item.locator(button_selector).first
-                    if button.get_attribute("aria-expanded") == "true":
-                        button.press("Enter")
-                        item.locator(region_selector).first.wait_for(
-                            state="hidden", timeout=min(5_000, self.timeout_ms)
-                        )
-                    button = item.locator(button_selector).first
-                    button.press("Enter")
                     content = item.locator(region_selector).first
+                    if button.get_attribute("aria-expanded") == "true":
+                        button.press("Enter", timeout=attempt_timeout)
+                    button = item.locator(button_selector).first
+                    content = item.locator(region_selector).first
+                    content.wait_for(state="hidden", timeout=attempt_timeout)
+                    self._require_closed(button, content, attempt_timeout)
+                    button = item.locator(button_selector).first
+                    content = item.locator(region_selector).first
+                    button.press("Enter", timeout=attempt_timeout)
                     content.wait_for(
-                        state="visible", timeout=min(5_000, self.timeout_ms)
+                        state="visible", timeout=attempt_timeout
                     )
-                    self._require_open_nested(button, content)
+                    self._require_open_nested(button, content, attempt_timeout)
             except PlaywrightTimeoutError as exc:
                 raise ScrapeError(
                     f"Nested value '{value_id}' did not reveal its details."
@@ -758,21 +772,45 @@ class NerisScraper:
         return rows
 
     @staticmethod
+    def _require_closed(
+        button: Locator, region: Locator, timeout: int
+    ) -> None:
+        """Require freshly queried controls to reach the semantic closed state."""
+
+        button_closed = button.evaluate(
+            "el => el.isConnected && el.getAttribute('aria-expanded') === 'false' "
+            "&& el.getAttribute('data-state') === 'closed'",
+            timeout=timeout,
+        )
+        region_closed = region.evaluate(
+            "el => el.isConnected && el.getAttribute('data-state') === 'closed' "
+            "&& (el.hidden || el.getClientRects().length === 0)",
+            timeout=timeout,
+        )
+        if not button_closed or not region_closed:
+            raise PlaywrightTimeoutError(
+                "accordion did not reach semantic closed state"
+            )
+
+    @staticmethod
     def _require_open_outer(
-        button: Locator, region: Locator, first_entry: Locator
+        button: Locator, region: Locator, first_entry: Locator, timeout: int
     ) -> None:
         """Require a connected open outer accordion with a visible entry."""
 
         button_open = button.evaluate(
             "el => el.isConnected && el.getAttribute('aria-expanded') === 'true' "
-            "&& el.getAttribute('data-state') === 'open'"
+            "&& el.getAttribute('data-state') === 'open'",
+            timeout=timeout,
         )
         region_open = region.evaluate(
             "el => el.isConnected && el.getAttribute('data-state') === 'open' "
-            "&& !el.hidden && el.getClientRects().length > 0"
+            "&& !el.hidden && el.getClientRects().length > 0",
+            timeout=timeout,
         )
         entry_visible = first_entry.evaluate(
-            "el => el.isConnected && el.getClientRects().length > 0"
+            "el => el.isConnected && el.getClientRects().length > 0",
+            timeout=timeout,
         )
         if not button_open or not region_open or not entry_visible:
             raise PlaywrightTimeoutError(
@@ -780,16 +818,20 @@ class NerisScraper:
             )
 
     @staticmethod
-    def _require_open_nested(button: Locator, content: Locator) -> None:
+    def _require_open_nested(
+        button: Locator, content: Locator, timeout: int
+    ) -> None:
         """Require the semantic open state after the bounded visibility wait."""
 
         button_open = button.evaluate(
             "el => el.isConnected && el.getAttribute('aria-expanded') === 'true' "
-            "&& el.getAttribute('data-state') === 'open'"
+            "&& el.getAttribute('data-state') === 'open'",
+            timeout=timeout,
         )
         region_open = content.evaluate(
             "el => el.isConnected && el.getAttribute('data-state') === 'open' "
-            "&& !el.hidden && el.getClientRects().length > 0"
+            "&& !el.hidden && el.getClientRects().length > 0",
+            timeout=timeout,
         )
         if not button_open or not region_open:
             raise PlaywrightTimeoutError(

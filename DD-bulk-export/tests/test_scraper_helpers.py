@@ -345,12 +345,17 @@ class _Content:
             _Paragraph("Description:", description),
             _Paragraph("Definition:", definition),
         )
+        self.button: _Button | None = None
 
     def wait_for(self, **_kwargs: object) -> None:
         return None
 
-    def evaluate(self, _expression: str) -> bool:
-        return True
+    def evaluate(self, expression: str, **_kwargs: object) -> bool:
+        if self.button is None:
+            return True
+        if "data-state') === 'closed'" in expression:
+            return self.button.expanded == "false"
+        return self.button.expanded == "true"
 
     def locator(self, selector: str) -> _Collection:
         assert selector == "p"
@@ -358,11 +363,18 @@ class _Content:
 
 
 class _OuterRegion:
+    def __init__(self) -> None:
+        self.button: _Button | None = None
+
     def wait_for(self, **_kwargs: object) -> None:
         return None
 
-    def evaluate(self, _expression: str) -> bool:
-        return True
+    def evaluate(self, expression: str, **_kwargs: object) -> bool:
+        if self.button is None:
+            return True
+        if "data-state') === 'closed'" in expression:
+            return self.button.expanded == "false"
+        return self.button.expanded == "true"
 
 
 class _Button:
@@ -371,7 +383,9 @@ class _Button:
         self.expanded = "false"
         self.click_count = 0
         self.press_count = 0
+        self.action_timeouts: list[int | None] = []
         self.outer_region = _OuterRegion()
+        self.outer_region.button = self
 
     def get_attribute(self, name: str) -> str | None:
         if name == "aria-expanded":
@@ -380,16 +394,20 @@ class _Button:
             return "open" if self.expanded == "true" else "closed"
         return None
 
-    def click(self) -> None:
+    def click(self, *, timeout: int | None = None) -> None:
         self.click_count += 1
+        self.action_timeouts.append(timeout)
         self.expanded = "false" if self.expanded == "true" else "true"
 
-    def press(self, key: str) -> None:
+    def press(self, key: str, *, timeout: int | None = None) -> None:
         assert key == "Enter"
         self.press_count += 1
+        self.action_timeouts.append(timeout)
         self.expanded = "false" if self.expanded == "true" else "true"
 
-    def evaluate(self, _expression: str) -> bool:
+    def evaluate(self, expression: str, **_kwargs: object) -> bool:
+        if "aria-expanded') === 'false'" in expression:
+            return self.expanded == "false"
         return self.expanded == "true"
 
     def locator(self, selector: str) -> _Collection:
@@ -407,6 +425,7 @@ class _ValueItem:
         self.value_id = value_id
         self.button = _Button(label)
         self.content = _Content(description, definition)
+        self.content.button = self.button
 
     def wait_for(self, **_kwargs: object) -> None:
         return None
@@ -414,7 +433,7 @@ class _ValueItem:
     def get_attribute(self, name: str) -> str | None:
         return self.value_id if name == "id" else None
 
-    def evaluate(self, _expression: str) -> bool:
+    def evaluate(self, _expression: str, **_kwargs: object) -> bool:
         return True
 
     def locator(self, selector: str) -> _Collection:
@@ -431,6 +450,7 @@ class _ValueTerm:
         self.outer_button = _Button("Values")
         self.outer_region = _OuterRegion()
         self.outer_button.outer_region = self.outer_region
+        self.outer_region.button = self.outer_button
 
     def locator(self, selector: str) -> _Collection:
         if selector == scraper_module.VALUE_ITEM_SELECTOR:
@@ -601,7 +621,7 @@ def test_outer_accordion_gets_one_bounded_hydration_retry() -> None:
                 raise scraper_module.PlaywrightTimeoutError("not hydrated")
             item.wait_for(**kwargs)
 
-        def evaluate(self, expression: str) -> bool:
+        def evaluate(self, expression: str, **_kwargs: object) -> bool:
             return item.evaluate(expression)
 
     class FlakyCollection(_Collection):
@@ -630,6 +650,7 @@ def test_outer_accordion_gets_one_bounded_hydration_retry() -> None:
 
     assert attempts == 2
     assert outer_button.click_count == 3
+    assert outer_button.action_timeouts == [5_000, 5_000, 5_000]
     assert [row.term_id for row in rows] == ["Parent-ONE"]
 
 
@@ -666,6 +687,7 @@ def test_outer_accordion_double_hydration_failure_fails_closed() -> None:
         )
 
     assert outer_button.click_count == 3
+    assert outer_button.action_timeouts == [5_000, 5_000, 5_000]
 
 
 def test_nested_accordion_gets_one_bounded_interaction_retry() -> None:
@@ -683,6 +705,7 @@ def test_nested_accordion_gets_one_bounded_interaction_retry() -> None:
             super().wait_for(**kwargs)
 
     item.content = FlakyContent("Description", "Definition")
+    item.content.button = item.button
     rows = NerisScraper()._scrape_values(  # type: ignore[arg-type]
         _ValueTerm(item),
         _Button("Values"),
@@ -696,6 +719,7 @@ def test_nested_accordion_gets_one_bounded_interaction_retry() -> None:
 
     assert attempts == 2
     assert item.button.press_count == 3
+    assert item.button.action_timeouts == [5_000, 5_000, 5_000]
     assert [row.term_id for row in rows] == ["Parent-ONE"]
 
 
@@ -709,6 +733,7 @@ def test_nested_accordion_double_interaction_failure_fails_closed() -> None:
             raise scraper_module.PlaywrightTimeoutError("still closed")
 
     item.content = NeverVisible("Description", "Definition")
+    item.content.button = item.button
     with pytest.raises(ScrapeError, match="did not reveal its details"):
         NerisScraper()._scrape_values(  # type: ignore[arg-type]
             _ValueTerm(item),
@@ -722,6 +747,7 @@ def test_nested_accordion_double_interaction_failure_fails_closed() -> None:
         )
 
     assert item.button.press_count == 3
+    assert item.button.action_timeouts == [5_000, 5_000, 5_000]
 
 
 def test_nested_long_label_uses_keyboard_when_center_click_is_intercepted() -> None:
@@ -736,6 +762,28 @@ def test_nested_long_label_uses_keyboard_when_center_click_is_intercepted() -> N
         "Definition",
     )
 
+    class CopyLinkInterceptedButton(_Button):
+        def __init__(self, label: str) -> None:
+            super().__init__(label)
+            self.clipboard_denials = 0
+
+        def click(self, *, timeout: int | None = None) -> None:
+            # Model Playwright's center point hitting the nested copy-link child:
+            # the child consumes the event, attempts clipboard access, and the
+            # parent Radix button remains semantically closed.
+            self.click_count += 1
+            self.action_timeouts.append(timeout)
+            self.clipboard_denials += 1
+
+    intercepted = CopyLinkInterceptedButton(long_label)
+    item.button = intercepted
+    item.content.button = intercepted
+    intercepted.click(timeout=5_000)
+
+    assert intercepted.clipboard_denials == 1
+    assert intercepted.get_attribute("aria-expanded") == "false"
+    assert intercepted.get_attribute("data-state") == "closed"
+
     rows = NerisScraper()._scrape_values(  # type: ignore[arg-type]
         _ValueTerm(item),
         _Button("Values"),
@@ -747,8 +795,10 @@ def test_nested_long_label_uses_keyboard_when_center_click_is_intercepted() -> N
         cancel_event=threading.Event(),
     )
 
-    assert item.button.click_count == 0
+    assert item.button.click_count == 1
+    assert item.button.clipboard_denials == 1
     assert item.button.press_count == 1
+    assert item.button.action_timeouts == [5_000, 5_000]
     assert item.button.get_attribute("data-state") == "open"
     assert rows[0].term_or_value_name == f"Core Incident - {long_label}"
 

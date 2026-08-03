@@ -7,7 +7,7 @@ import pytest
 
 from dd_bulk_export.csv_io import read_template, write_merged_csv
 from dd_bulk_export.models import BatchScrapeResult
-from dd_bulk_export.scraper import NerisScraper
+from dd_bulk_export.scraper import NerisScraper, ScrapeError
 
 
 APP_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -26,6 +26,10 @@ CORE_ENTITY_URL = (
 CONSUMER_PRODUCTS_URL = (
     "https://neris.fsri.org/data-dictionary"
     "?page=1&pageSize=100&module=incident-analysis-consumer-products"
+)
+TYPO_CONSUMER_PRODUCTS_URL = (
+    "https://neris.fsri.org/data-dictionary"
+    "?page=1&pageSize=100&module=incident-aanlysis-consumer-products"
 )
 SHARED_TACTICAL_TIMESTAMPS_URL = (
     "https://neris.fsri.org/data-dictionary"
@@ -125,6 +129,9 @@ def test_battery_then_core_batch_order_and_merged_counts(tmp_path: Path) -> None
 @pytest.mark.live
 def test_consumer_products_exact_supplied_url_is_dom_derived() -> None:
     result = NerisScraper(timeout_ms=30_000).scrape(CONSUMER_PRODUCTS_URL)
+    assert result.term_count == 5
+    assert result.value_count == 3
+    assert len(result.rows) == 8
     assert {row.term_id for row in result.rows} >= {
         "Consumer-Products-Consumer-Product-Type",
         "Consumer-Products-Product-Contribution-IGNITION",
@@ -132,6 +139,18 @@ def test_consumer_products_exact_supplied_url_is_dom_derived() -> None:
     assert {(row.module, row.submodule) for row in result.rows} == {
         ("incident-analysis", "consumer-products")
     }
+
+
+@pytest.mark.live
+def test_typo_consumer_products_url_fails_closed_without_partial_result() -> None:
+    with pytest.raises(
+        ScrapeError,
+        match=(
+            r"Zero terms rendered.*incident-aanlysis-consumer-products"
+            r".*verify the module URL"
+        ),
+    ):
+        NerisScraper(timeout_ms=5_000).scrape(TYPO_CONSUMER_PRODUCTS_URL)
 
 
 @pytest.mark.live
