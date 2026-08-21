@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- Reduced deterministic fixture modeled from the supplied otherpage.html and
+     verified against the rendered Consumer Products page on 2026-08-02. -->
+<html><body>
+  <ul>
+    <li id="Consumer-Products-Product-Contribution">
+      <h2>Consumer Products - Product Contribution</h2>
+      <div class="prose"><p>How the product contributed.</p></div>
+      <div><div><span>modules:</span><div>Incident Analysis-Consumer Products</div></div></div>
+      <div>
+        <button type="button" aria-expanded="false" data-state="closed"><h3>Available choices</h3></button>
+        <div role="region" data-state="closed" hidden>
+          <div data-orientation="vertical" id="Consumer-Products-Product-Contribution-IGNITION">
+            <h3><button type="button" aria-expanded="false" data-state="closed"><span><span>IGNITION</span></span></button></h3>
+            <div role="region" data-state="closed" hidden>
+              <p><span>Description:</span> Ignition</p>
+              <p><span>Definition:</span> The product contributed to ignition.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </li>
+  </ul>
+  <script>
+    for (const button of document.querySelectorAll('button[aria-expanded]')) {
+      button.addEventListener('click', () => {
+        const opening = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        button.setAttribute('data-state', opening ? 'open' : 'closed');
+        const region = button.parentElement.nextElementSibling || button.nextElementSibling;
+        if (region) {
+          region.hidden = !opening;
+          region.setAttribute('data-state', opening ? 'open' : 'closed');
+        }
+      });
+    }
+  </script>
+</body></html>
